@@ -1,0 +1,17 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Medical Cross with subtle rounded pill shapes -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M48,28 h12 v52 h-12 z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M28,48 h52 v12 h-52 z" />
+    <!-- Heart accent in top right -->
+    <path
+        android:fillColor="#BFDBF7"
+        android:pathData="M65,35 c0,-4 3,-7 7,-7 c4,0 7,3 7,7 c0,6 -9,12 -14,16 c-5,-4 -14,-10 -14,-16 c0,-4 3,-7 7,-7 c4,0 7,3 7,7 z" />
+</vector>
