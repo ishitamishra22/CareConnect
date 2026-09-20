@@ -22,6 +22,7 @@ val MedicalErrorRed = Color(0xFFBA1A1A)
 val MedicalOnErrorRed = Color(0xFFFFFFFF)
 val MedicalErrorContainer = Color(0xFFFFDAD6)
 val MedicalOnErrorContainer = Color(0xFF410002)
+val MedicalErrorContainerDark = Color(0xFF93000A)
 
 val BackgroundLight = Color(0xFFF8FAFB)
 val SurfaceLight = Color(0xFFFFFFFF)
