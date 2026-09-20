@@ -19,7 +19,10 @@ import com.nmims.careconnect.navigation.Screen
 import com.nmims.careconnect.navigation.rememberAppNavController
 import com.nmims.careconnect.ui.auth.LoginScreen
 import com.nmims.careconnect.ui.auth.RoleSelectionScreen
+import com.nmims.careconnect.ui.portfolio.AddDocumentScreen
 import com.nmims.careconnect.ui.portfolio.AddEditRecordScreen
+import com.nmims.careconnect.ui.portfolio.DocumentViewerScreen
+import com.nmims.careconnect.ui.portfolio.DocumentsScreen
 import com.nmims.careconnect.ui.portfolio.EditProfileScreen
 import com.nmims.careconnect.ui.portfolio.MedicalRecordsScreen
 import com.nmims.careconnect.ui.portfolio.PortfolioScreen
@@ -105,21 +108,21 @@ fun CareConnectApp(
             )
         }
         is Screen.Documents -> {
-            PlaceholderRouteScreen(
-                title = "Documents",
-                onBack = { navController.back() }
+            DocumentsScreen(
+                onNavigateToAddDocument = { navController.navigate(Screen.AddDocument) },
+                onNavigateToViewer = { id -> navController.navigate(Screen.DocumentViewer(id)) },
+                onNavigateBack = { navController.back() }
             )
         }
         is Screen.AddDocument -> {
-            PlaceholderRouteScreen(
-                title = "Add Document",
-                onBack = { navController.back() }
+            AddDocumentScreen(
+                onNavigateBack = { navController.back() }
             )
         }
         is Screen.DocumentViewer -> {
-            PlaceholderRouteScreen(
-                title = "Document Viewer",
-                onBack = { navController.back() }
+            DocumentViewerScreen(
+                documentId = current.documentId,
+                onNavigateBack = { navController.back() }
             )
         }
         is Screen.About -> {
