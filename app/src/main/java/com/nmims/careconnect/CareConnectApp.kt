@@ -19,6 +19,8 @@ import com.nmims.careconnect.navigation.Screen
 import com.nmims.careconnect.navigation.rememberAppNavController
 import com.nmims.careconnect.ui.auth.LoginScreen
 import com.nmims.careconnect.ui.auth.RoleSelectionScreen
+import com.nmims.careconnect.ui.portfolio.EditProfileScreen
+import com.nmims.careconnect.ui.portfolio.PortfolioScreen
 
 @Composable
 fun CareConnectApp(
@@ -75,15 +77,16 @@ fun CareConnectApp(
             )
         }
         is Screen.Portfolio -> {
-            PlaceholderRouteScreen(
-                title = "Portfolio",
-                onBack = { navController.back() }
+            PortfolioScreen(
+                onNavigateToEditProfile = { navController.navigate(Screen.EditProfile) },
+                onNavigateToRecords = { navController.navigate(Screen.MedicalRecords) },
+                onNavigateToDocuments = { navController.navigate(Screen.Documents) },
+                onNavigateBack = { navController.back() }
             )
         }
         is Screen.EditProfile -> {
-            PlaceholderRouteScreen(
-                title = "Edit Profile",
-                onBack = { navController.back() }
+            EditProfileScreen(
+                onNavigateBack = { navController.back() }
             )
         }
         is Screen.MedicalRecords -> {
