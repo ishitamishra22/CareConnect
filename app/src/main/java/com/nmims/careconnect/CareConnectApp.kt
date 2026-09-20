@@ -17,8 +17,12 @@ import com.nmims.careconnect.data.model.UserRole
 import com.nmims.careconnect.navigation.AppNavController
 import com.nmims.careconnect.navigation.Screen
 import com.nmims.careconnect.navigation.rememberAppNavController
+import com.nmims.careconnect.ui.about.AboutScreen
+import com.nmims.careconnect.ui.admin.AdminHomeScreen
 import com.nmims.careconnect.ui.auth.LoginScreen
 import com.nmims.careconnect.ui.auth.RoleSelectionScreen
+import com.nmims.careconnect.ui.doctor.DoctorHomeScreen
+import com.nmims.careconnect.ui.patient.PatientHomeScreen
 import com.nmims.careconnect.ui.portfolio.AddDocumentScreen
 import com.nmims.careconnect.ui.portfolio.AddEditRecordScreen
 import com.nmims.careconnect.ui.portfolio.DocumentViewerScreen
@@ -64,21 +68,19 @@ fun CareConnectApp(
             )
         }
         is Screen.PatientHome -> {
-            PlaceholderRouteScreen(
-                title = "Patient Home",
-                onBack = { navController.back() }
+            PatientHomeScreen(
+                onNavigateToPortfolio = { navController.navigate(Screen.Portfolio) },
+                onLogout = { navController.resetTo(Screen.RoleSelection) }
             )
         }
         is Screen.DoctorHome -> {
-            PlaceholderRouteScreen(
-                title = "Doctor Home",
-                onBack = { navController.back() }
+            DoctorHomeScreen(
+                onLogout = { navController.resetTo(Screen.RoleSelection) }
             )
         }
         is Screen.AdminHome -> {
-            PlaceholderRouteScreen(
-                title = "Admin Home",
-                onBack = { navController.back() }
+            AdminHomeScreen(
+                onLogout = { navController.resetTo(Screen.RoleSelection) }
             )
         }
         is Screen.Portfolio -> {
@@ -126,23 +128,9 @@ fun CareConnectApp(
             )
         }
         is Screen.About -> {
-            PlaceholderRouteScreen(
-                title = "About",
-                onBack = { navController.back() }
+            AboutScreen(
+                onNavigateBack = { navController.back() }
             )
         }
-    }
-}
-
-@Composable
-private fun PlaceholderRouteScreen(
-    title: String,
-    onBack: () -> Unit
-) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text("$title Screen Placeholder")
     }
 }
