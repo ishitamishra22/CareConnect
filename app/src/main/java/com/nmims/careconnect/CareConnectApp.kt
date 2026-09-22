@@ -30,6 +30,10 @@ import com.nmims.careconnect.ui.portfolio.DocumentsScreen
 import com.nmims.careconnect.ui.portfolio.EditProfileScreen
 import com.nmims.careconnect.ui.portfolio.MedicalRecordsScreen
 import com.nmims.careconnect.ui.portfolio.PortfolioScreen
+import com.nmims.careconnect.ui.search.CompareScreen
+import com.nmims.careconnect.ui.search.DoctorDetailScreen
+import com.nmims.careconnect.ui.search.HospitalDetailScreen
+import com.nmims.careconnect.ui.search.SearchScreen
 
 @Composable
 fun CareConnectApp(
@@ -70,6 +74,7 @@ fun CareConnectApp(
         is Screen.PatientHome -> {
             PatientHomeScreen(
                 onNavigateToPortfolio = { navController.navigate(Screen.Portfolio) },
+                onNavigateToSearch = { navController.navigate(Screen.Search) },
                 onLogout = { navController.resetTo(Screen.RoleSelection) }
             )
         }
@@ -129,6 +134,35 @@ fun CareConnectApp(
         }
         is Screen.About -> {
             AboutScreen(
+                onNavigateBack = { navController.back() }
+            )
+        }
+        is Screen.Search -> {
+            SearchScreen(
+                initialTab = current.initialTab,
+                onNavigateBack = { navController.back() },
+                onDoctorClick = { doctorId -> navController.navigate(Screen.DoctorDetail(doctorId)) },
+                onHospitalClick = { hospitalId -> navController.navigate(Screen.HospitalDetail(hospitalId)) },
+                onCompareClick = { doctorIds -> navController.navigate(Screen.Compare(doctorIds)) }
+            )
+        }
+        is Screen.HospitalDetail -> {
+            HospitalDetailScreen(
+                hospitalId = current.hospitalId,
+                onNavigateBack = { navController.back() },
+                onDoctorClick = { doctorId -> navController.navigate(Screen.DoctorDetail(doctorId)) }
+            )
+        }
+        is Screen.DoctorDetail -> {
+            DoctorDetailScreen(
+                doctorId = current.doctorId,
+                onNavigateBack = { navController.back() },
+                onHospitalClick = { hospitalId -> navController.navigate(Screen.HospitalDetail(hospitalId)) }
+            )
+        }
+        is Screen.Compare -> {
+            CompareScreen(
+                doctorIds = current.doctorIds,
                 onNavigateBack = { navController.back() }
             )
         }

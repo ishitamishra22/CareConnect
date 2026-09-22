@@ -75,6 +75,7 @@ data class FeatureItem(
 @Composable
 fun PatientHomeScreen(
     onNavigateToPortfolio: () -> Unit,
+    onNavigateToSearch: () -> Unit = {},
     onLogout: () -> Unit
 ) {
     val context = LocalContext.current
@@ -97,7 +98,7 @@ fun PatientHomeScreen(
             title = "Find Hospitals & Doctors",
             subtitle = "Search specialists, compare facilities, reviews & consultation fees",
             icon = Icons.Default.Search,
-            onClick = { comingSoonToast("Hospital & Doctor Search") }
+            onClick = onNavigateToSearch
         ),
         FeatureItem(
             title = "Book Appointment / Lab Test",

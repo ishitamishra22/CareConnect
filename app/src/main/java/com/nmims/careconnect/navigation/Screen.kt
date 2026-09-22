@@ -19,4 +19,19 @@ sealed class Screen {
     data object AddDocument : Screen()
     data class DocumentViewer(val documentId: String) : Screen()
     data object About : Screen()
+
+    // Phase 2: Hospital & Doctor Search and Comparison
+    open class Search(val initialTab: Int = 0) : Screen() {
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (other !is Search) return false
+            return initialTab == other.initialTab
+        }
+        override fun hashCode(): Int = initialTab.hashCode()
+        override fun toString(): String = "Search(initialTab=$initialTab)"
+        companion object : Search(0)
+    }
+    data class HospitalDetail(val hospitalId: String) : Screen()
+    data class DoctorDetail(val doctorId: String) : Screen()
+    data class Compare(val doctorIds: List<String>) : Screen()
 }

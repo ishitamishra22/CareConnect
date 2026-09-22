@@ -13,12 +13,12 @@ CareConnect is an Android application developed for the university Mobile Applic
 ## Modules & Ownership
 CareConnect is divided into 4 cohesive modules developed across project phases:
 
-| Module | Scope | Owner |
-| :--- | :--- | :--- |
-| **Module 1** | **Medical Portfolio Management & Foundation** (Profile, Medical Records, Documents, Sharing Summary) | Person 1 |
-| **Module 2** | **Hospital & Doctor Search and Comparison** (Discovery, Specialties, Filtering, Doctor Profiles) | Person 2 |
-| **Module 3** | **OPD Appointment & Test Booking** (Slot Selection, Lab Tests, Booking Management, Rescheduling) | Person 3 |
-| **Module 4** | **Automated Hospital Admission & Admin Dashboard** (Direct Admission, Bed Allotment, Admin Analytics) | Person 4 |
+| Module | Scope | Status | Owner |
+| :--- | :--- | :--- | :--- |
+| **Module 1** | **Medical Portfolio Management & Foundation** (Profile, Medical Records, Documents, Sharing Summary) | Completed (Phase 1) | Person 1 |
+| **Module 2** | **Hospital & Doctor Search and Comparison** (Discovery, Specialties, Filtering, Doctor Profiles, Comparison Table) | Completed (Phase 2) | Person 2 |
+| **Module 3** | **OPD Appointment & Test Booking** (Slot Selection, Lab Tests, Booking Management, Rescheduling) | Upcoming (Phase 3) | Person 3 |
+| **Module 4** | **Automated Hospital Admission & Admin Dashboard** (Direct Admission, Bed Allotment, Admin Analytics) | Upcoming (Phase 4) | Person 4 |
 
 ## Project Team
 - **Course**: Mobile Application Development (702AI0E002)
@@ -28,7 +28,7 @@ CareConnect is divided into 4 cohesive modules developed across project phases:
 | Team Member | Role | Module | Email |
 | :--- | :--- | :--- | :--- |
 | **Person 1** | Project Foundation & Module 1 Lead | Medical Portfolio Management | ISHITA.MISHRA30@nmims.in |
-| **Person 2** | Module 2 Developer | Hospital & Doctor Search | teammate2@nmims.edu |
+| **Person 2** | Module 2 Developer | Hospital & Doctor Search | mangluniakrtanish@gmail.com |
 | **Teammate 3** | Module 3 Developer | OPD Appointment & Test Booking | teammate3@nmims.edu |
 | **Teammate 4** | Module 4 Developer | Automated Hospital Admission & Admin | teammate4@nmims.edu |
 
