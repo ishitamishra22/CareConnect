@@ -1,11 +1,16 @@
 package com.nmims.careconnect.data.repository
 
 import android.content.Context
+import com.google.firebase.firestore.SetOptions
+import com.nmims.careconnect.data.firebase.Collections
+import com.nmims.careconnect.data.firebase.FirebaseProvider
 import com.nmims.careconnect.data.model.MedicalDocument
 import com.nmims.careconnect.data.model.MedicalRecord
 import com.nmims.careconnect.data.model.PatientProfile
 import com.nmims.careconnect.data.model.PortfolioSummary
 import com.nmims.careconnect.data.storage.FileStorageManager
+import com.nmims.careconnect.session.AppSession
+import kotlinx.coroutines.tasks.await
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -24,19 +29,42 @@ class PortfolioRepository(context: Context) {
     }
 
     suspend fun getProfile(): PatientProfile? {
-        val jsonString = storage.readText(FILE_PROFILE) ?: return null
-        return try {
-            val json = JSONObject(jsonString)
-            PatientProfile.fromJson(json)
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
+        val patientId = AppSession.currentPatientId
+        if (patientId.isBlank()) return null
+
+        val result = FirebaseProvider.safeCall {
+            val snapshot = FirebaseProvider.db
+                .collection(Collections.PATIENTS)
+                .document(patientId)
+                .get()
+                .await()
+
+            if (snapshot.exists()) {
+                val data = snapshot.data
+                if (data != null) PatientProfile.fromMap(data) else null
+            } else {
+                null
+            }
         }
+        return result.getOrNull()
     }
 
     suspend fun saveProfile(profile: PatientProfile): Boolean {
-        val jsonString = profile.toJson().toString(2)
-        return storage.writeText(FILE_PROFILE, jsonString)
+        val patientId = AppSession.currentPatientId
+        if (patientId.isBlank()) return false
+
+        val result = FirebaseProvider.safeCall {
+            val data = profile.toMap().toMutableMap()
+            data["updatedAtMillis"] = System.currentTimeMillis()
+
+            FirebaseProvider.db
+                .collection(Collections.PATIENTS)
+                .document(patientId)
+                .set(data, SetOptions.merge())
+                .await()
+            true
+        }
+        return result.getOrDefault(false)
     }
 
     suspend fun getRecords(): List<MedicalRecord> {

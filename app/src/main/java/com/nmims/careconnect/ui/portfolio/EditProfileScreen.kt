@@ -72,6 +72,7 @@ fun EditProfileScreen(
     val repository = PortfolioRepositoryProvider.get(context)
 
     var isLoading by rememberSaveable { mutableStateOf(true) }
+    var isSaving by rememberSaveable { mutableStateOf(false) }
 
     // Form states
     var name by rememberSaveable { mutableStateOf(AppSession.currentUserName) }
@@ -149,7 +150,8 @@ fun EditProfileScreen(
     }
 
     fun handleSave() {
-        if (!isFormValid) return
+        if (!isFormValid || isSaving) return
+        isSaving = true
 
         val profile = PatientProfile(
             name = trimmedName,
@@ -173,7 +175,8 @@ fun EditProfileScreen(
                 Toast.makeText(context, "Profile saved successfully", Toast.LENGTH_SHORT).show()
                 onNavigateBack()
             } else {
-                Toast.makeText(context, "Failed to save profile", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Could not reach the server. Check your internet connection.", Toast.LENGTH_SHORT).show()
+                isSaving = false
             }
         }
     }
@@ -437,9 +440,9 @@ fun EditProfileScreen(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 PrimaryButton(
-                    text = "Save Medical Profile",
+                    text = if (isSaving) "Saving Medical Profile..." else "Save Medical Profile",
                     onClick = { handleSave() },
-                    enabled = isFormValid
+                    enabled = isFormValid && !isSaving
                 )
 
                 Spacer(modifier = Modifier.height(32.dp))
