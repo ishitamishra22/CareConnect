@@ -21,6 +21,23 @@ data class PatientProfile(
     val chronicConditions: List<String> = emptyList(),
     val currentMedications: List<String> = emptyList()
 ) {
+    fun toMap(): Map<String, Any?> {
+        return mapOf(
+            "name" to name,
+            "age" to age,
+            "gender" to gender,
+            "bloodGroup" to bloodGroup,
+            "phone" to phone,
+            "email" to email,
+            "address" to address,
+            "emergencyContactName" to emergencyContactName,
+            "emergencyContactPhone" to emergencyContactPhone,
+            "allergies" to allergies,
+            "chronicConditions" to chronicConditions,
+            "currentMedications" to currentMedications
+        )
+    }
+
     fun toJson(): JSONObject {
         return JSONObject().apply {
             put("name", name)
@@ -39,45 +56,42 @@ data class PatientProfile(
     }
 
     companion object {
-        fun fromJson(json: JSONObject): PatientProfile {
-            val allergiesList = mutableListOf<String>()
-            val allergiesArray = json.optJSONArray("allergies")
-            if (allergiesArray != null) {
-                for (i in 0 until allergiesArray.length()) {
-                    allergiesList.add(allergiesArray.getString(i))
-                }
-            }
-
-            val conditionsList = mutableListOf<String>()
-            val conditionsArray = json.optJSONArray("chronicConditions")
-            if (conditionsArray != null) {
-                for (i in 0 until conditionsArray.length()) {
-                    conditionsList.add(conditionsArray.getString(i))
-                }
-            }
-
-            val medicationsList = mutableListOf<String>()
-            val medicationsArray = json.optJSONArray("currentMedications")
-            if (medicationsArray != null) {
-                for (i in 0 until medicationsArray.length()) {
-                    medicationsList.add(medicationsArray.getString(i))
-                }
-            }
+        fun fromMap(map: Map<String, Any?>): PatientProfile {
+            val allergiesList = (map["allergies"] as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList()
+            val conditionsList = (map["chronicConditions"] as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList()
+            val medicationsList = (map["currentMedications"] as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList()
 
             return PatientProfile(
-                name = json.optString("name", ""),
-                age = json.optInt("age", 0),
-                gender = json.optString("gender", ""),
-                bloodGroup = json.optString("bloodGroup", ""),
-                phone = json.optString("phone", ""),
-                email = json.optString("email", ""),
-                address = json.optString("address", ""),
-                emergencyContactName = json.optString("emergencyContactName", ""),
-                emergencyContactPhone = json.optString("emergencyContactPhone", ""),
+                name = map["name"] as? String ?: "",
+                age = (map["age"] as? Number)?.toInt() ?: 0,
+                gender = map["gender"] as? String ?: "",
+                bloodGroup = map["bloodGroup"] as? String ?: "",
+                phone = map["phone"] as? String ?: "",
+                email = map["email"] as? String ?: "",
+                address = map["address"] as? String ?: "",
+                emergencyContactName = map["emergencyContactName"] as? String ?: "",
+                emergencyContactPhone = map["emergencyContactPhone"] as? String ?: "",
                 allergies = allergiesList,
                 chronicConditions = conditionsList,
                 currentMedications = medicationsList
             )
+        }
+
+        fun fromJson(json: JSONObject): PatientProfile {
+            val map = mutableMapOf<String, Any?>()
+            val keys = json.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                val v = json.opt(key)
+                if (v is JSONArray) {
+                    val list = mutableListOf<String>()
+                    for (i in 0 until v.length()) list.add(v.getString(i))
+                    map[key] = list
+                } else {
+                    map[key] = v
+                }
+            }
+            return fromMap(map)
         }
     }
 }

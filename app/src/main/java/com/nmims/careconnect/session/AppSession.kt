@@ -9,12 +9,14 @@ import com.nmims.careconnect.data.model.UserRole
 object AppSession {
     var currentRole: UserRole? = null
     var currentUserName: String = ""
+    var currentPatientId: String = ""
     var currentDoctorId: String? = null
     var currentHospitalId: String? = null
 
     fun logout() {
         currentRole = null
         currentUserName = ""
+        currentPatientId = ""
         currentDoctorId = null
         currentHospitalId = null
     }

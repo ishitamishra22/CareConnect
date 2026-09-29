@@ -91,6 +91,10 @@ fun LoginScreen(
         if (isValid) {
             AppSession.currentRole = role
             AppSession.currentUserName = trimmed
+            // Demo identity without passwords: normalize patient name to generate a consistent document key
+            if (role == UserRole.PATIENT) {
+                AppSession.currentPatientId = trimmed.lowercase().replace(Regex("\\s+"), "_")
+            }
             focusManager.clearFocus()
             onLoginSuccess()
         }
