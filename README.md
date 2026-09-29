@@ -1,12 +1,10 @@
-# CareConnect - Hospital Appointment Booking & Healthcare Document Manager
-
 CareConnect is an Android application developed for the university Mobile Application Development course project (SVKM's NMIMS, MBA-Tech Computer Engineering, Semester V). CareConnect brings every part of a patient's healthcare journey—medical history records, document storage, hospital and doctor discovery, appointment and lab test booking, and hospital admission—into a unified platform, allowing patient medical portfolios to be reused automatically so forms are never filled repeatedly.
 
 ## Tech Stack
 - **Language**: Kotlin 2.0.21
 - **UI Framework**: Jetpack Compose with Material 3 (Compose BOM 2024.12.01)
 - **Architecture**: Single Activity (`MainActivity`), custom back stack navigation (`AppNavController` + sealed `Screen` hierarchy), in-memory session (`AppSession`)
-- **Persistence**: Android Internal File Storage (`context.filesDir`) with standard `org.json` serialization (Zero external DB, zero networking libraries)
+- **Persistence**: Firebase Anonymous Authentication with Cloud Firestore for patient profiles, medical records, document metadata, and Firebase Storage for document images
 - **Image Handling**: Native Android `BitmapFactory` with sample size downscaling and internal app document storage
 - **Compatibility**: Android SDK 24+ (Android 7.0 Nougat to Android 15, compileSdk 35)
 

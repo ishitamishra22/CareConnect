@@ -147,10 +147,10 @@ private fun DocumentGridCard(
 ) {
     var thumbnailBitmap by remember { mutableStateOf<Bitmap?>(null) }
 
-    LaunchedEffect(document.imageFilePath) {
-        if (document.imageFilePath.isNotBlank()) {
+    LaunchedEffect(document.storagePath) {
+        if (document.storagePath.isNotBlank()) {
             withContext(Dispatchers.IO) {
-                thumbnailBitmap = storageManager.loadBitmap(document.imageFilePath)
+                thumbnailBitmap = storageManager.loadBitmap(document.storagePath)
             }
         }
     }

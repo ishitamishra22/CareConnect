@@ -80,8 +80,8 @@ fun DocumentViewerScreen(
         val docs = repository.getDocuments()
         val doc = docs.find { it.id == documentId }
         document = doc
-        if (doc != null && doc.imageFilePath.isNotBlank()) {
-            documentBitmap = storageManager.loadBitmap(doc.imageFilePath)
+        if (doc != null && doc.storagePath.isNotBlank()) {
+            documentBitmap = storageManager.loadBitmap(doc.storagePath)
         }
         isLoading = false
     }
