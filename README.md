@@ -27,7 +27,7 @@ CareConnect is divided into 4 cohesive modules developed across project phases:
 | :--- | :--- | :--- | :--- |
 | **Person 1** | Project Foundation & Module 1 Lead | Medical Portfolio Management | ISHITA.MISHRA30@nmims.in |
 | **Person 2** | Module 2 Developer | Hospital & Doctor Search | mangluniakrtanish@gmail.com |
-| **Teammate 3** | Module 3 Developer | OPD Appointment & Test Booking | teammate3@nmims.edu |
+| **Person 3** | Module 3 Developer | OPD Appointment & Test Booking | atharva.bapardekar@gmail.com |
 | **Teammate 4** | Module 4 Developer | Automated Hospital Admission & Admin | teammate4@nmims.edu |
 
 ## How to Run
