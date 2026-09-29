@@ -88,6 +88,7 @@ fun MedicalRecordsScreen(
     var isLoading by remember { mutableStateOf(true) }
     var records by remember { mutableStateOf<List<MedicalRecord>>(emptyList()) }
     var recordToDelete by remember { mutableStateOf<MedicalRecord?>(null) }
+    var isDeleting by remember { mutableStateOf(false) }
 
     fun loadRecords() {
         coroutineScope.launch {
@@ -153,17 +154,23 @@ fun MedicalRecordsScreen(
                 message = "Are you sure you want to delete '${target.title}'? This action cannot be undone.",
                 confirmText = "Delete",
                 onConfirm = {
-                    coroutineScope.launch {
-                        val deleted = repository.deleteRecord(target.id)
-                        if (deleted) {
-                            Toast.makeText(context, "Record deleted", Toast.LENGTH_SHORT).show()
-                            loadRecords()
-                        } else {
-                            Toast.makeText(context, "Failed to delete record", Toast.LENGTH_SHORT).show()
+                    if (!isDeleting) {
+                        isDeleting = true
+                        val idToDelete = target.id
+                        coroutineScope.launch {
+                            val deleted = repository.deleteRecord(idToDelete)
+                            isDeleting = false
+                            recordToDelete = null
+                            if (deleted) {
+                                Toast.makeText(context, "Record deleted", Toast.LENGTH_SHORT).show()
+                                loadRecords()
+                            } else {
+                                Toast.makeText(context, "Could not reach the server. Check your internet connection.", Toast.LENGTH_SHORT).show()
+                            }
                         }
                     }
                 },
-                onDismiss = { recordToDelete = null }
+                onDismiss = { if (!isDeleting) recordToDelete = null }
             )
         }
     }

@@ -81,6 +81,7 @@ fun AddEditRecordScreen(
     val repository = PortfolioRepositoryProvider.get(context)
 
     var isLoading by rememberSaveable { mutableStateOf(recordId != null) }
+    var isSaving by rememberSaveable { mutableStateOf(false) }
 
     var selectedType by rememberSaveable { mutableStateOf(RecordType.DIAGNOSIS) }
     var title by rememberSaveable { mutableStateOf("") }
@@ -124,7 +125,8 @@ fun AddEditRecordScreen(
     val isTitleValid = trimmedTitle.isNotBlank()
 
     fun handleSave() {
-        if (!isTitleValid) return
+        if (!isTitleValid || isSaving) return
+        isSaving = true
 
         val finalId = recordId ?: UUID.randomUUID().toString()
         val record = MedicalRecord(
@@ -152,7 +154,8 @@ fun AddEditRecordScreen(
                 ).show()
                 onNavigateBack()
             } else {
-                Toast.makeText(context, "Failed to save record", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Could not reach the server. Check your internet connection.", Toast.LENGTH_SHORT).show()
+                isSaving = false
             }
         }
     }
@@ -305,9 +308,9 @@ fun AddEditRecordScreen(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 PrimaryButton(
-                    text = if (recordId == null) "Add Record" else "Save Changes",
+                    text = if (isSaving) "Saving..." else if (recordId == null) "Add Record" else "Save Changes",
                     onClick = { handleSave() },
-                    enabled = isTitleValid
+                    enabled = isTitleValid && !isSaving
                 )
 
                 Spacer(modifier = Modifier.height(32.dp))

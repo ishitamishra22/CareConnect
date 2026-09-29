@@ -68,46 +68,74 @@ class PortfolioRepository(context: Context) {
     }
 
     suspend fun getRecords(): List<MedicalRecord> {
-        val jsonString = storage.readText(FILE_RECORDS) ?: return emptyList()
-        return try {
-            val jsonArray = JSONArray(jsonString)
-            val list = mutableListOf<MedicalRecord>()
-            for (i in 0 until jsonArray.length()) {
-                list.add(MedicalRecord.fromJson(jsonArray.getJSONObject(i)))
-            }
-            list.sortedByDescending { it.dateMillis }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            emptyList()
+        val patientId = AppSession.currentPatientId
+        if (patientId.isBlank()) return emptyList()
+
+        val result = FirebaseProvider.safeCall {
+            val snapshot = FirebaseProvider.db
+                .collection(Collections.PATIENTS)
+                .document(patientId)
+                .collection(Collections.RECORDS)
+                .get()
+                .await()
+
+            snapshot.documents.mapNotNull { doc ->
+                val data = doc.data
+                if (data != null) MedicalRecord.fromMap(data) else null
+            }.sortedByDescending { it.dateMillis }
         }
+        return result.getOrDefault(emptyList())
     }
 
     suspend fun addRecord(record: MedicalRecord): Boolean {
-        val currentRecords = getRecords().toMutableList()
-        currentRecords.add(0, record)
-        return saveRecords(currentRecords)
+        val patientId = AppSession.currentPatientId
+        if (patientId.isBlank()) return false
+
+        val result = FirebaseProvider.safeCall {
+            FirebaseProvider.db
+                .collection(Collections.PATIENTS)
+                .document(patientId)
+                .collection(Collections.RECORDS)
+                .document(record.id)
+                .set(record.toMap())
+                .await()
+            true
+        }
+        return result.getOrDefault(false)
     }
 
     suspend fun updateRecord(record: MedicalRecord): Boolean {
-        val currentRecords = getRecords().toMutableList()
-        val index = currentRecords.indexOfFirst { it.id == record.id }
-        if (index != -1) {
-            currentRecords[index] = record
-            return saveRecords(currentRecords)
+        val patientId = AppSession.currentPatientId
+        if (patientId.isBlank()) return false
+
+        val result = FirebaseProvider.safeCall {
+            FirebaseProvider.db
+                .collection(Collections.PATIENTS)
+                .document(patientId)
+                .collection(Collections.RECORDS)
+                .document(record.id)
+                .set(record.toMap(), SetOptions.merge())
+                .await()
+            true
         }
-        return false
+        return result.getOrDefault(false)
     }
 
     suspend fun deleteRecord(recordId: String): Boolean {
-        val currentRecords = getRecords().toMutableList()
-        val removed = currentRecords.removeAll { it.id == recordId }
-        return if (removed) saveRecords(currentRecords) else false
-    }
+        val patientId = AppSession.currentPatientId
+        if (patientId.isBlank()) return false
 
-    private suspend fun saveRecords(records: List<MedicalRecord>): Boolean {
-        val array = JSONArray()
-        records.forEach { array.put(it.toJson()) }
-        return storage.writeText(FILE_RECORDS, array.toString(2))
+        val result = FirebaseProvider.safeCall {
+            FirebaseProvider.db
+                .collection(Collections.PATIENTS)
+                .document(patientId)
+                .collection(Collections.RECORDS)
+                .document(recordId)
+                .delete()
+                .await()
+            true
+        }
+        return result.getOrDefault(false)
     }
 
     suspend fun getDocuments(): List<MedicalDocument> {
