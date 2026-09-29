@@ -1,6 +1,7 @@
 package com.nmims.careconnect.data.repository
 
 import android.content.Context
+import android.graphics.Bitmap
 import com.google.firebase.firestore.SetOptions
 import com.nmims.careconnect.data.firebase.Collections
 import com.nmims.careconnect.data.firebase.FirebaseProvider
@@ -11,22 +12,14 @@ import com.nmims.careconnect.data.model.PortfolioSummary
 import com.nmims.careconnect.data.storage.FileStorageManager
 import com.nmims.careconnect.session.AppSession
 import kotlinx.coroutines.tasks.await
-import org.json.JSONArray
-import org.json.JSONObject
 
 /**
  * Repository orchestrating access to the patient profile, medical records,
- * and uploaded healthcare documents via JSON files in internal storage.
+ * and uploaded healthcare documents backed by Cloud Firestore and Firebase Storage.
  */
 class PortfolioRepository(context: Context) {
 
     private val storage = FileStorageManager(context)
-
-    companion object {
-        private const val FILE_PROFILE = "profile.json"
-        private const val FILE_RECORDS = "records.json"
-        private const val FILE_DOCUMENTS = "documents.json"
-    }
 
     suspend fun getProfile(): PatientProfile? {
         val patientId = AppSession.currentPatientId
@@ -139,50 +132,126 @@ class PortfolioRepository(context: Context) {
     }
 
     suspend fun getDocuments(): List<MedicalDocument> {
-        val jsonString = storage.readText(FILE_DOCUMENTS) ?: return emptyList()
-        return try {
-            val jsonArray = JSONArray(jsonString)
-            val list = mutableListOf<MedicalDocument>()
-            for (i in 0 until jsonArray.length()) {
-                list.add(MedicalDocument.fromJson(jsonArray.getJSONObject(i)))
-            }
-            list.sortedByDescending { it.addedOnMillis }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            emptyList()
+        val patientId = AppSession.currentPatientId
+        if (patientId.isBlank()) return emptyList()
+
+        val result = FirebaseProvider.safeCall {
+            val snapshot = FirebaseProvider.db
+                .collection(Collections.PATIENTS)
+                .document(patientId)
+                .collection(Collections.DOCUMENTS)
+                .get()
+                .await()
+
+            snapshot.documents.mapNotNull { doc ->
+                val data = doc.data
+                if (data != null) MedicalDocument.fromMap(data) else null
+            }.sortedByDescending { it.addedOnMillis }
         }
+        return result.getOrDefault(emptyList())
+    }
+
+    suspend fun addDocument(doc: MedicalDocument, imageBytes: ByteArray): Boolean {
+        val patientId = AppSession.currentPatientId
+        if (patientId.isBlank()) return false
+
+        val storagePath = doc.storagePath.ifBlank {
+            "patients/$patientId/documents/${doc.id}.jpg"
+        }
+        val finalDoc = doc.copy(storagePath = storagePath)
+
+        val result = FirebaseProvider.safeCall {
+            val storageRef = FirebaseProvider.storage.reference.child(storagePath)
+            storageRef.putBytes(imageBytes).await()
+
+            try {
+                FirebaseProvider.db
+                    .collection(Collections.PATIENTS)
+                    .document(patientId)
+                    .collection(Collections.DOCUMENTS)
+                    .document(finalDoc.id)
+                    .set(finalDoc.toMap())
+                    .await()
+            } catch (e: Exception) {
+                try {
+                    storageRef.delete().await()
+                } catch (_: Exception) {}
+                throw e
+            }
+
+            try {
+                val cache = storage.cacheFile(finalDoc.id)
+                cache.writeBytes(imageBytes)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            true
+        }
+        return result.getOrDefault(false)
     }
 
     suspend fun addDocument(document: MedicalDocument): Boolean {
-        val currentDocs = getDocuments().toMutableList()
-        currentDocs.add(0, document)
-        return saveDocuments(currentDocs)
+        val cache = storage.cacheFile(document.id)
+        val bytes = if (cache.exists()) cache.readBytes() else ByteArray(0)
+        return addDocument(document, bytes)
+    }
+
+    suspend fun loadDocumentBitmap(doc: MedicalDocument): Bitmap? {
+        val cache = storage.cacheFile(doc.id)
+        if (cache.exists()) {
+            val bmp = storage.loadBitmap(cache.absolutePath)
+            if (bmp != null) return bmp
+        }
+
+        val path = doc.storagePath
+        if (path.isBlank()) return null
+
+        val result = FirebaseProvider.safeCall {
+            val storageRef = FirebaseProvider.storage.reference.child(path)
+            val bytes = storageRef.getBytes(5L * 1024L * 1024L).await()
+            try {
+                cache.writeBytes(bytes)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            storage.loadBitmap(cache.absolutePath)
+        }
+        return result.getOrNull()
     }
 
     suspend fun deleteDocument(documentId: String): Boolean {
-        val currentDocs = getDocuments().toMutableList()
-        val docToDelete = currentDocs.find { it.id == documentId }
-        if (docToDelete != null) {
-            // Delete actual image from internal storage
-            if (docToDelete.imageFilePath.isNotBlank()) {
-                storage.deleteImage(docToDelete.imageFilePath)
-            }
-            currentDocs.remove(docToDelete)
-            return saveDocuments(currentDocs)
-        }
-        return false
-    }
+        val patientId = AppSession.currentPatientId
+        if (patientId.isBlank()) return false
 
-    private suspend fun saveDocuments(docs: List<MedicalDocument>): Boolean {
-        val array = JSONArray()
-        docs.forEach { array.put(it.toJson()) }
-        return storage.writeText(FILE_DOCUMENTS, array.toString(2))
+        val result = FirebaseProvider.safeCall {
+            val docRef = FirebaseProvider.db
+                .collection(Collections.PATIENTS)
+                .document(patientId)
+                .collection(Collections.DOCUMENTS)
+                .document(documentId)
+
+            val docSnap = docRef.get().await()
+            val storagePath = docSnap.getString("storagePath")
+                ?: "patients/$patientId/documents/$documentId.jpg"
+
+            try {
+                FirebaseProvider.storage.reference.child(storagePath).delete().await()
+            } catch (_: Exception) {}
+
+            docRef.delete().await()
+
+            try {
+                storage.cacheFile(documentId).delete()
+            } catch (_: Exception) {}
+            true
+        }
+        return result.getOrDefault(false)
     }
 
     suspend fun getSummary(): PortfolioSummary {
-        val profile = getProfile()
-        val records = getRecords()
-        val docs = getDocuments()
+        val profile = try { getProfile() } catch (_: Exception) { null }
+        val records = try { getRecords() } catch (_: Exception) { emptyList() }
+        val docs = try { getDocuments() } catch (_: Exception) { emptyList() }
 
         return PortfolioSummary(
             patientName = profile?.name ?: "",

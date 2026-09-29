@@ -1,7 +1,5 @@
 package com.nmims.careconnect.data.model
 
-import org.json.JSONArray
-import org.json.JSONObject
 
 /**
  * Data model for patient profile.
@@ -38,23 +36,6 @@ data class PatientProfile(
         )
     }
 
-    fun toJson(): JSONObject {
-        return JSONObject().apply {
-            put("name", name)
-            put("age", age)
-            put("gender", gender)
-            put("bloodGroup", bloodGroup)
-            put("phone", phone)
-            put("email", email)
-            put("address", address)
-            put("emergencyContactName", emergencyContactName)
-            put("emergencyContactPhone", emergencyContactPhone)
-            put("allergies", JSONArray(allergies))
-            put("chronicConditions", JSONArray(chronicConditions))
-            put("currentMedications", JSONArray(currentMedications))
-        }
-    }
-
     companion object {
         fun fromMap(map: Map<String, Any?>): PatientProfile {
             val allergiesList = (map["allergies"] as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList()
@@ -75,23 +56,6 @@ data class PatientProfile(
                 chronicConditions = conditionsList,
                 currentMedications = medicationsList
             )
-        }
-
-        fun fromJson(json: JSONObject): PatientProfile {
-            val map = mutableMapOf<String, Any?>()
-            val keys = json.keys()
-            while (keys.hasNext()) {
-                val key = keys.next()
-                val v = json.opt(key)
-                if (v is JSONArray) {
-                    val list = mutableListOf<String>()
-                    for (i in 0 until v.length()) list.add(v.getString(i))
-                    map[key] = list
-                } else {
-                    map[key] = v
-                }
-            }
-            return fromMap(map)
         }
     }
 }

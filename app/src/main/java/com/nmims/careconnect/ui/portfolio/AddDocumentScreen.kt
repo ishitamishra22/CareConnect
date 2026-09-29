@@ -75,6 +75,7 @@ import androidx.compose.ui.unit.dp
 import com.nmims.careconnect.data.model.DocumentCategory
 import com.nmims.careconnect.data.model.MedicalDocument
 import com.nmims.careconnect.data.repository.PortfolioRepositoryProvider
+import com.nmims.careconnect.session.AppSession
 import com.nmims.careconnect.ui.common.CareTopBar
 import com.nmims.careconnect.ui.common.PrimaryButton
 import com.nmims.careconnect.ui.common.SectionCard
@@ -143,38 +144,39 @@ fun AddDocumentScreen(
     val isFormValid = trimmedTitle.isNotBlank() && hasImage && !isSaving
 
     fun handleSave() {
-        if (!isFormValid) return
+        if (!isFormValid || isSaving) return
         isSaving = true
 
         val documentId = UUID.randomUUID().toString()
-        val fileName = "$documentId.jpg"
+        val patientId = AppSession.currentPatientId
+        val storagePath = "patients/$patientId/documents/$documentId.jpg"
 
         coroutineScope.launch {
-            val savedPath = when {
-                capturedBitmap != null -> storageManager.saveBitmap(capturedBitmap!!, fileName)
-                selectedUri != null -> storageManager.saveImageFromUri(selectedUri!!, fileName)
+            val bytes = when {
+                capturedBitmap != null -> storageManager.compressToJpegBytes(capturedBitmap!!)
+                selectedUri != null -> storageManager.bytesFromUri(selectedUri!!)
                 else -> null
             }
 
-            if (savedPath != null) {
+            if (bytes != null) {
                 val doc = MedicalDocument(
                     id = documentId,
                     title = trimmedTitle,
                     category = selectedCategory,
                     addedOnMillis = System.currentTimeMillis(),
-                    imageFilePath = savedPath,
+                    storagePath = storagePath,
                     notes = notes.trim()
                 )
-                val added = repository.addDocument(doc)
+                val added = repository.addDocument(doc, bytes)
                 if (added) {
                     Toast.makeText(context, "Document saved successfully", Toast.LENGTH_SHORT).show()
                     onNavigateBack()
                 } else {
-                    Toast.makeText(context, "Failed to save document metadata", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Could not reach the server. Check your internet connection.", Toast.LENGTH_SHORT).show()
                     isSaving = false
                 }
             } else {
-                Toast.makeText(context, "Failed to save document image", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Failed to process document image", Toast.LENGTH_SHORT).show()
                 isSaving = false
             }
         }

@@ -137,4 +137,41 @@ class FileStorageManager(private val context: Context) {
             false
         }
     }
+
+    fun cacheFile(documentId: String): File {
+        return File(documentsDir, "$documentId.jpg")
+    }
+
+    suspend fun compressToJpegBytes(bitmap: Bitmap): ByteArray = withContext(Dispatchers.IO) {
+        val width = bitmap.width
+        val height = bitmap.height
+        val maxDim = maxOf(width, height)
+        val scaled = if (maxDim > 1280) {
+            val scale = 1280f / maxDim
+            val targetWidth = (width * scale).toInt().coerceAtLeast(1)
+            val targetHeight = (height * scale).toInt().coerceAtLeast(1)
+            Bitmap.createScaledBitmap(bitmap, targetWidth, targetHeight, true)
+        } else {
+            bitmap
+        }
+        val stream = java.io.ByteArrayOutputStream()
+        scaled.compress(Bitmap.CompressFormat.JPEG, 80, stream)
+        stream.toByteArray()
+    }
+
+    suspend fun bytesFromUri(uri: Uri): ByteArray? = withContext(Dispatchers.IO) {
+        try {
+            val bitmap = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                val source = android.graphics.ImageDecoder.createSource(context.contentResolver, uri)
+                android.graphics.ImageDecoder.decodeBitmap(source)
+            } else {
+                @Suppress("DEPRECATION")
+                android.provider.MediaStore.Images.Media.getBitmap(context.contentResolver, uri)
+            }
+            compressToJpegBytes(bitmap)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
 }

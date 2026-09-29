@@ -1,6 +1,5 @@
 package com.nmims.careconnect.data.model
 
-import org.json.JSONObject
 
 /**
  * Categories for uploaded healthcare documents.
@@ -23,11 +22,9 @@ data class MedicalDocument(
     val title: String,
     val category: DocumentCategory,
     val addedOnMillis: Long,
-    val imageFilePath: String,
+    val storagePath: String,
     val notes: String
 ) {
-    val storagePath: String get() = imageFilePath
-
     fun toMap(): Map<String, Any?> {
         return mapOf(
             "id" to id,
@@ -37,18 +34,6 @@ data class MedicalDocument(
             "storagePath" to storagePath,
             "notes" to notes
         )
-    }
-
-    fun toJson(): JSONObject {
-        return JSONObject().apply {
-            put("id", id)
-            put("title", title)
-            put("category", category.name)
-            put("addedOnMillis", addedOnMillis)
-            put("storagePath", storagePath)
-            put("imageFilePath", imageFilePath)
-            put("notes", notes)
-        }
     }
 
     companion object {
@@ -69,28 +54,8 @@ data class MedicalDocument(
                 title = map["title"] as? String ?: "",
                 category = category,
                 addedOnMillis = (map["addedOnMillis"] as? Number)?.toLong() ?: System.currentTimeMillis(),
-                imageFilePath = path,
+                storagePath = path,
                 notes = map["notes"] as? String ?: ""
-            )
-        }
-
-        fun fromJson(json: JSONObject): MedicalDocument {
-            val categoryName = json.optString("category", DocumentCategory.OTHER.name)
-            val category = try {
-                DocumentCategory.valueOf(categoryName)
-            } catch (_: Exception) {
-                DocumentCategory.OTHER
-            }
-
-            val path = json.optString("storagePath", json.optString("imageFilePath", ""))
-
-            return MedicalDocument(
-                id = json.optString("id", ""),
-                title = json.optString("title", ""),
-                category = category,
-                addedOnMillis = json.optLong("addedOnMillis", System.currentTimeMillis()),
-                imageFilePath = path,
-                notes = json.optString("notes", "")
             )
         }
     }
