@@ -16,7 +16,6 @@ package com.nmims.careconnect.ui.search
 import android.content.Intent
 import android.net.Uri
 import android.webkit.WebView
-import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -77,6 +76,22 @@ import com.nmims.careconnect.ui.common.RatingBar
 import com.nmims.careconnect.ui.common.SectionCard
 import com.nmims.careconnect.ui.theme.CareConnectTheme
 
+import android.widget.Toast
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import com.nmims.careconnect.data.model.UserRole
+import com.nmims.careconnect.session.AppSession
+import com.nmims.careconnect.ui.common.RatingInput
+import kotlinx.coroutines.launch
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun HospitalDetailScreen(
@@ -85,7 +100,9 @@ fun HospitalDetailScreen(
     onDoctorClick: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
-    val hospital = remember(hospitalId) { HospitalRepository.getHospital(hospitalId) }
+    val coroutineScope = rememberCoroutineScope()
+    var hospitalState by remember(hospitalId) { mutableStateOf(HospitalRepository.getHospital(hospitalId)) }
+    val hospital = hospitalState
 
     if (hospital == null) {
         Scaffold(
@@ -105,8 +122,14 @@ fun HospitalDetailScreen(
         return
     }
 
+    
     val doctors = remember(hospitalId) { HospitalRepository.getDoctorsForHospital(hospitalId) }
-    val reviews = remember(hospitalId) { HospitalRepository.getReviewsFor(hospitalId) }
+    var reviews by remember(hospitalId) { mutableStateOf(HospitalRepository.getReviewsFor(hospitalId)) }
+
+    var showReviewDialog by remember { mutableStateOf(false) }
+    var reviewRating by remember { mutableIntStateOf(5) }
+    var reviewComment by remember { mutableStateOf("") }
+    var isSubmittingReview by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -453,13 +476,33 @@ fun HospitalDetailScreen(
 
             // Patient Reviews Section
             item {
-                Text(
-                    text = "Patient Reviews (${reviews.size})",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Patient Reviews (${reviews.size})",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+
+                    if (AppSession.currentRole == UserRole.PATIENT) {
+                        OutlinedButton(
+                            onClick = {
+                                val myReview = reviews.firstOrNull { it.id == "${hospital.id}_${AppSession.currentPatientId}" }
+                                reviewRating = myReview?.rating ?: 5
+                                reviewComment = myReview?.comment ?: ""
+                                showReviewDialog = true
+                            }
+                        ) {
+                            Text("Write a review")
+                        }
+                    }
+                }
             }
 
             items(reviews, key = { it.id }) { review ->
@@ -526,6 +569,93 @@ fun HospitalDetailScreen(
                 Spacer(modifier = Modifier.height(16.dp))
             }
         }
+    }
+
+    if (showReviewDialog) {
+        val isCommentValid = reviewComment.trim().length in 10..200
+        AlertDialog(
+            onDismissRequest = {
+                if (!isSubmittingReview) showReviewDialog = false
+            },
+            title = { Text("Write a review") },
+            text = {
+                Column {
+                    Text(
+                        text = "Your Rating:",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    RatingInput(
+                        rating = reviewRating,
+                        onRatingChange = { reviewRating = it }
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    OutlinedTextField(
+                        value = reviewComment,
+                        onValueChange = { if (it.length <= 200) reviewComment = it },
+                        label = { Text("Review comment") },
+                        placeholder = { Text("Share your experience (10 - 200 characters)") },
+                        supportingText = {
+                            Text("${reviewComment.trim().length} / 200 characters")
+                        },
+                        isError = reviewComment.isNotBlank() && !isCommentValid,
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3,
+                        maxLines = 5,
+                        enabled = !isSubmittingReview
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (!isCommentValid || isSubmittingReview) return@Button
+                        isSubmittingReview = true
+                        coroutineScope.launch {
+                            val newReview = Review(
+                                id = "${hospital.id}_${AppSession.currentPatientId}",
+                                targetId = hospital.id,
+                                reviewerName = AppSession.currentUserName,
+                                rating = reviewRating,
+                                comment = reviewComment.trim(),
+                                dateMillis = System.currentTimeMillis()
+                            )
+                            val success = HospitalRepository.addReview(newReview)
+                            isSubmittingReview = false
+                            if (success) {
+                                Toast.makeText(context, "Review submitted", Toast.LENGTH_SHORT).show()
+                                showReviewDialog = false
+                                // Refresh screen state
+                                hospitalState = HospitalRepository.getHospital(hospitalId)
+                                reviews = HospitalRepository.getReviewsFor(hospitalId)
+                            } else {
+                                Toast.makeText(context, "Could not reach the server...", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    },
+                    enabled = isCommentValid && !isSubmittingReview
+                ) {
+                    if (isSubmittingReview) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    Text("Submit")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showReviewDialog = false },
+                    enabled = !isSubmittingReview
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 

@@ -68,3 +68,37 @@ fun RatingBar(
         }
     }
 }
+
+/**
+ * Interactive RatingInput displaying five tappable star icons.
+ */
+@Composable
+fun RatingInput(
+    rating: Int,
+    onRatingChange: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    maxStars: Int = 5,
+    size: Dp = 32.dp,
+    tint: Color = Color(0xFFF59E0B)
+) {
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        for (star in 1..maxStars) {
+            val isSelected = star <= rating
+            androidx.compose.material3.IconButton(
+                onClick = { onRatingChange(star) },
+                modifier = Modifier.size(size + 8.dp)
+            ) {
+                Icon(
+                    imageVector = if (isSelected) Icons.Default.Star else Icons.Default.StarBorder,
+                    contentDescription = "$star stars",
+                    tint = if (isSelected) tint else tint.copy(alpha = 0.45f),
+                    modifier = Modifier.size(size)
+                )
+            }
+        }
+    }
+}
+
