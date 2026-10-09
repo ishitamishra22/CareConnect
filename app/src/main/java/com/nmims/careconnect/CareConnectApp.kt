@@ -49,6 +49,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.nmims.careconnect.data.repository.HospitalRepository
 import com.nmims.careconnect.ui.common.LoadingIndicator
+import com.nmims.careconnect.ui.booking.BookAppointmentScreen
 
 @Composable
 fun CareConnectApp(
@@ -204,6 +205,12 @@ fun CareConnectApp(
                 doctorId = current.doctorId,
                 onNavigateBack = { navController.back() },
                 onHospitalClick = { hospitalId -> navController.navigate(Screen.HospitalDetail(hospitalId)) }
+            )
+        }
+        is Screen.BookAppointment -> {
+            BookAppointmentScreen(
+                doctorId = current.doctorId,
+                onNavigateBack = { navController.back() }
             )
         }
         is Screen.Compare -> {
