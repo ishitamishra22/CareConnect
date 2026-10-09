@@ -210,7 +210,18 @@ fun CareConnectApp(
         is Screen.BookAppointment -> {
             BookAppointmentScreen(
                 doctorId = current.doctorId,
-                onNavigateBack = { navController.back() }
+                onNavigateBack = { navController.back() },
+                onCreateProfile = {
+                    navController.navigate(Screen.EditProfile)
+                },
+                onBookingSuccess = { bookingId ->
+                    navController.resetTo(Screen.PatientHome)
+                    Toast.makeText(
+                        context,
+                        "Booking confirmed: ${bookingId.take(8).uppercase()}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
             )
         }
         is Screen.Compare -> {

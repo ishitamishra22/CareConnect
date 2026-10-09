@@ -1,69 +1,56 @@
 package com.nmims.careconnect.ui.booking
 
-/*
- * BookAppointmentScreen:
- * Displays doctor details, allows future-date selection,
- * validates available days and displays unbooked appointment slots.
- * Booking confirmation and portfolio consent are added in the next step.
- */
+/* Appointment booking with date/slot validation, portfolio consent and confirmation. */
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
+import android.widget.Toast
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.DatePickerState
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SelectableDates
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberDatePickerState
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.nmims.careconnect.data.firebase.Collections
+import com.nmims.careconnect.data.firebase.FirebaseProvider
+import com.nmims.careconnect.data.model.Booking
+import com.nmims.careconnect.data.model.BookingStatus
+import com.nmims.careconnect.data.model.BookingType
 import com.nmims.careconnect.data.repository.BookingRepositoryProvider
 import com.nmims.careconnect.data.repository.HospitalRepository
+import com.nmims.careconnect.data.repository.PortfolioRepositoryProvider
+import com.nmims.careconnect.data.repository.SlotTakenException
+import com.nmims.careconnect.session.AppSession
 import com.nmims.careconnect.ui.common.CareTopBar
 import com.nmims.careconnect.ui.common.DateUtils
 import com.nmims.careconnect.ui.common.SectionCard
 import com.nmims.careconnect.ui.theme.CareConnectTheme
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.TimeZone
+import java.util.UUID
+import com.nmims.careconnect.data.model.PatientProfile
 
-@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun BookAppointmentScreen(
     doctorId: String,
-    onNavigateBack: () -> Unit = {}
+    onNavigateBack: () -> Unit = {},
+    onCreateProfile: () -> Unit = {},
+    onBookingSuccess: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val doctor = remember(doctorId) { HospitalRepository.getDoctor(doctorId) }
-    val hospital = remember(doctor?.hospitalId) {
-        doctor?.let { HospitalRepository.getHospital(it.hospitalId) }
-    }
-    val bookingRepository = remember(context) {
-        BookingRepositoryProvider.get(context)
-    }
+    val hospital = remember(doctor?.hospitalId) { doctor?.let { HospitalRepository.getHospital(it.hospitalId) } }
+    val bookings = remember(context) { BookingRepositoryProvider.get(context) }
+    val portfolio = remember(context) { PortfolioRepositoryProvider.get(context) }
 
     var selectedDate by remember { mutableStateOf<Long?>(null) }
     var selectedSlot by remember { mutableStateOf<String?>(null) }
@@ -71,28 +58,86 @@ fun BookAppointmentScreen(
     var showDatePicker by remember { mutableStateOf(false) }
     var slotsLoading by remember { mutableStateOf(false) }
     var slotsError by remember { mutableStateOf(false) }
+    var refreshSlots by remember { mutableIntStateOf(0) }
+    var reason by remember { mutableStateOf("") }
+    var consent by remember { mutableStateOf(false) }
+    var summary by remember { mutableStateOf<String?>(null) }
+    var profileMissing by remember { mutableStateOf(false) }
+    var summaryLoading by remember { mutableStateOf(true) }
+    var showConfirmation by remember { mutableStateOf(false) }
+    var saving by remember { mutableStateOf(false) }
 
-    val todayStart = DateUtils.todayStartMillis()
-    val selectedDayName = selectedDate?.let {
-        SimpleDateFormat("EEE", Locale.ENGLISH).format(Date(it))
+    val dayName = selectedDate?.let { SimpleDateFormat("EEE", Locale.ENGLISH).format(Date(it)) }
+    val availableDay = dayName != null && doctor?.availableDays?.any {
+        it.equals(dayName, ignoreCase = true) || it.take(3).equals(dayName, ignoreCase = true)
+    } == true
+
+    LaunchedEffect(AppSession.currentPatientId) {
+        summaryLoading = true
+        summary = null
+        profileMissing = false
+        consent = false
+
+        val patientId = AppSession.currentPatientId
+
+        if (patientId.isNotBlank()) {
+            try {
+                val result = FirebaseProvider.safeCall {
+                    val patientRef = FirebaseProvider.db
+                        .collection(Collections.PATIENTS)
+                        .document(patientId)
+
+                    val profileSnapshot = patientRef.get().await()
+
+                    if (!profileSnapshot.exists()) {
+                        null
+                    } else {
+                        val profileData = profileSnapshot.data
+                            ?: error("Patient profile data unavailable")
+
+                        // Validate that the stored profile can be read.
+                        PatientProfile.fromMap(profileData)
+
+                        // Ensure both collections are accessible.
+                        patientRef.collection(Collections.RECORDS)
+                            .get().await()
+
+                        patientRef.collection(Collections.DOCUMENTS)
+                            .get().await()
+
+                        true
+                    }
+                }
+
+                if (result.isSuccess) {
+                    if (result.getOrNull() == null) {
+                        profileMissing = true
+                    } else {
+                        val generated = portfolio.getSummary()
+
+                        if (generated.patientName.isNotBlank()) {
+                            summary = generated.toShareableText()
+                        }
+                    }
+                }
+            } catch (_: Exception) {
+                summary = null
+            }
+        }
+
+        summaryLoading = false
     }
-    val isAvailableDay = selectedDayName != null &&
-        doctor?.availableDays?.any {
-            it.equals(selectedDayName, ignoreCase = true) ||
-                it.take(3).equals(selectedDayName, ignoreCase = true)
-        } == true
 
-    LaunchedEffect(doctorId, selectedDate, isAvailableDay) {
+    LaunchedEffect(doctorId, selectedDate, availableDay, refreshSlots) {
         bookedSlots = emptyList()
         selectedSlot = null
         slotsError = false
         slotsLoading = false
-
         val date = selectedDate
-        if (date != null && isAvailableDay) {
+        if (date != null && availableDay) {
             slotsLoading = true
             try {
-                bookedSlots = bookingRepository.getBookedSlots(doctorId, date)
+                bookedSlots = bookings.getBookedSlots(doctorId, date)
             } catch (_: Exception) {
                 slotsError = true
             } finally {
@@ -101,153 +146,175 @@ fun BookAppointmentScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            CareTopBar(
-                title = "Book Appointment",
-                onBack = onNavigateBack
-            )
-        }
-    ) { innerPadding ->
+    val validReason = reason.trim().length in 10..200
+    val canConfirm = doctor != null && hospital != null &&
+        selectedDate != null && selectedDate!! >= DateUtils.todayStartMillis() &&
+        availableDay && !slotsLoading && !slotsError && selectedSlot != null &&
+        validReason && consent && summary != null && !saving
+
+    Scaffold(topBar = { CareTopBar(title = "Book Appointment", onBack = onNavigateBack) }) { padding ->
         if (doctor == null) {
-            Text(
-                text = "Doctor profile not found",
-                modifier = Modifier.padding(innerPadding).padding(16.dp)
-            )
+            Text("Doctor profile not found", modifier = Modifier.padding(padding).padding(16.dp))
         } else {
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
+                modifier = Modifier.fillMaxSize().padding(padding)
+                    .verticalScroll(rememberScrollState()).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 SectionCard(title = "Doctor Details") {
-                    Text(
-                        text = doctor.name,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(text = doctor.specialty)
-                    Text(text = hospital?.name ?: "Hospital unavailable")
-                    Text(
-                        text = "Consultation fee INR ${doctor.consultationFee}",
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    Text(doctor.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text(doctor.specialty)
+                    Text(hospital?.name ?: "Hospital unavailable")
+                    Text("Consultation fee INR ${doctor.consultationFee}", fontWeight = FontWeight.SemiBold)
                 }
-
                 SectionCard(title = "Appointment Date") {
-                    TextButton(
-                        onClick = { showDatePicker = true },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            selectedDate?.let { DateUtils.formatWithDay(it) }
-                                ?: "Select appointment date"
-                        )
+                    TextButton(onClick = { showDatePicker = true }, modifier = Modifier.fillMaxWidth()) {
+                        Text(selectedDate?.let(DateUtils::formatWithDay) ?: "Select appointment date")
                     }
-
-                    Text(
-                        text = "Available days: ${doctor.availableDays.joinToString(", ")}",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-
-                    if (selectedDate != null && !isAvailableDay) {
-                        Text(
-                            text = "Doctor is not available on this day",
-                            color = MaterialTheme.colorScheme.error
-                        )
+                    Text("Available days: ${doctor.availableDays.joinToString(", ")}")
+                    if (selectedDate != null && !availableDay) {
+                        Text("Doctor is not available on this day", color = MaterialTheme.colorScheme.error)
                     }
                 }
-
-                if (selectedDate != null && isAvailableDay) {
+                if (selectedDate != null && availableDay) {
                     SectionCard(title = "Available Time Slots") {
                         when {
                             slotsLoading -> Text("Checking available slots...")
-                            slotsError -> Text(
-                                "Unable to check slot availability. Please select another date.",
-                                color = MaterialTheme.colorScheme.error
-                            )
+                            slotsError -> Text("Unable to check slot availability", color = MaterialTheme.colorScheme.error)
                             else -> {
-                                FlowRow(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
+                                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     doctor.availableSlots.forEach { slot ->
-                                        val taken = bookedSlots.any {
-                                            it.equals(slot, ignoreCase = true)
-                                        }
+                                        val taken = bookedSlots.any { it.equals(slot, ignoreCase = true) }
                                         FilterChip(
                                             selected = selectedSlot == slot,
                                             onClick = { selectedSlot = slot },
                                             enabled = !taken,
-                                            label = {
-                                                Text(
-                                                    text = slot,
-                                                    textDecoration = if (taken) {
-                                                        TextDecoration.LineThrough
-                                                    } else {
-                                                        TextDecoration.None
-                                                    }
-                                                )
-                                            }
+                                            label = { Text(slot, textDecoration = if (taken) TextDecoration.LineThrough else TextDecoration.None) }
                                         )
                                     }
                                 }
-                                if (doctor.availableSlots.isEmpty()) {
-                                    Text("No appointment slots configured.")
-                                }
+                                if (doctor.availableSlots.isEmpty()) Text("No appointment slots configured.")
                             }
                         }
                     }
                 }
+                SectionCard(title = "Reason for Visit") {
+                    OutlinedTextField(
+                        value = reason,
+                        onValueChange = { if (it.length <= 200) reason = it },
+                        label = { Text("Reason for appointment") },
+                        minLines = 3,
+                        maxLines = 5,
+                        modifier = Modifier.fillMaxWidth(),
+                        supportingText = { Text("${reason.trim().length}/200 characters (minimum 10)") },
+                        isError = reason.isNotEmpty() && !validReason
+                    )
+                }
+                SectionCard(title = "Medical Portfolio Sharing") {
+                    when {
+                        summaryLoading -> CircularProgressIndicator()
+                        profileMissing -> {
+                            Text("Please create your patient profile before booking.")
+                            TextButton(onClick = onCreateProfile) { Text("Create profile") }
+                        }
+                        summary == null -> Text("Medical summary unavailable", color = MaterialTheme.colorScheme.error)
+                        else -> {
+                            Text("Your medical summary will be shared with the doctor for this appointment.")
+                            Row {
+                                Checkbox(checked = consent, onCheckedChange = { consent = it })
+                                Text("I consent to sharing my medical portfolio with the doctor.", modifier = Modifier.padding(top = 12.dp))
+                            }
+                        }
+                    }
+                }
+                Button(
+                    onClick = { showConfirmation = true },
+                    enabled = canConfirm,
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text(if (saving) "Saving..." else "Confirm Booking") }
             }
         }
     }
 
     if (showDatePicker) {
-        val datePickerState = rememberDatePickerState(
-            selectableDates = object : SelectableDates {
-                override fun isSelectableDate(utcTimeMillis: Long): Boolean {
-                    return DateUtils.normalizeToDayStart(utcTimeMillis) >=
-                        DateUtils.todayStartMillis()
-                }
-            }
-        )
-
+        val picker = rememberDatePickerState(selectableDates = object : SelectableDates {
+            override fun isSelectableDate(utcTimeMillis: Long): Boolean =
+                DateUtils.normalizeToDayStart(utcTimeMillis) >= DateUtils.todayStartMillis()
+        })
         DatePickerDialog(
             onDismissRequest = { showDatePicker = false },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        datePickerState.selectedDateMillis?.let { millis ->
-                            val normalized = DateUtils.normalizeToDayStart(millis)
-                            if (normalized >= DateUtils.todayStartMillis()) {
-                                selectedDate = normalized
-                            }
-                        }
-                        showDatePicker = false
+                TextButton(onClick = {
+                    picker.selectedDateMillis?.let {
+                        val date = DateUtils.normalizeToDayStart(it)
+                        if (date >= DateUtils.todayStartMillis()) selectedDate = date
                     }
-                ) {
-                    Text("OK")
-                }
+                    showDatePicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Cancel") } }
+        ) { DatePicker(state = picker) }
+    }
+
+    if (showConfirmation && doctor != null) {
+        AlertDialog(
+            onDismissRequest = { if (!saving) showConfirmation = false },
+            title = { Text("Confirm Appointment") },
+            text = {
+                Text("Doctor: ${doctor.name}\nDate: ${selectedDate?.let(DateUtils::formatWithDay)}\nTime: $selectedSlot\nConsultation fee INR ${doctor.consultationFee}")
+            },
+            confirmButton = {
+                TextButton(enabled = canConfirm, onClick = {
+                    val date = selectedDate ?: return@TextButton
+                    val slot = selectedSlot ?: return@TextButton
+                    val medicalSummary = summary ?: return@TextButton
+                    val patientId = AppSession.currentPatientId
+                    if (patientId.isBlank()) return@TextButton
+                    saving = true
+                    scope.launch {
+                        try {
+                            val booking = Booking(
+                                id = UUID.randomUUID().toString(),
+                                type = BookingType.OPD_APPOINTMENT,
+                                patientId = patientId,
+                                patientName = AppSession.currentUserName,
+                                hospitalId = doctor.hospitalId,
+                                doctorId = doctor.id,
+                                labTestId = null,
+                                dateMillis = date,
+                                timeSlot = slot,
+                                reason = reason.trim(),
+                                sharedPortfolioText = medicalSummary,
+                                status = BookingStatus.CONFIRMED,
+                                createdAtMillis = System.currentTimeMillis()
+                            )
+                            if (bookings.add(booking)) {
+                                showConfirmation = false
+                                onBookingSuccess(booking.id)
+                            } else {
+                                Toast.makeText(context, "Could not save booking", Toast.LENGTH_LONG).show()
+                            }
+                        } catch (_: SlotTakenException) {
+                            showConfirmation = false
+                            refreshSlots++
+                            Toast.makeText(context, "That slot was just booked - please pick another", Toast.LENGTH_LONG).show()
+                        } catch (_: Exception) {
+                            Toast.makeText(context, "Could not save booking", Toast.LENGTH_LONG).show()
+                        } finally {
+                            saving = false
+                        }
+                    }
+                }) { Text("Book Now") }
             },
             dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) {
-                    Text("Cancel")
-                }
+                TextButton(enabled = !saving, onClick = { showConfirmation = false }) { Text("Back") }
             }
-        ) {
-            DatePicker(state = datePickerState)
-        }
+        )
     }
 }
 
 @Preview(showBackground = true)
 @Composable
 private fun BookAppointmentScreenPreview() {
-    CareConnectTheme {
-        BookAppointmentScreen(doctorId = "preview")
-    }
+    CareConnectTheme { BookAppointmentScreen(doctorId = "preview") }
 }
