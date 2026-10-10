@@ -216,12 +216,7 @@ fun CareConnectApp(
                     navController.navigate(Screen.EditProfile)
                 },
                 onBookingSuccess = { bookingId ->
-                    navController.resetTo(Screen.PatientHome)
-                    Toast.makeText(
-                        context,
-                        "Booking confirmed: ${bookingId.take(8).uppercase()}",
-                        Toast.LENGTH_LONG
-                    ).show()
+                    navController.navigate(Screen.BookingSuccess(bookingId))
                 }
             )
         }
@@ -232,12 +227,20 @@ fun CareConnectApp(
                     navController.navigate(Screen.EditProfile)
                 },
                 onBookingSuccess = { bookingId ->
+                    navController.navigate(Screen.BookingSuccess(bookingId))
+                }
+            )
+        }
+        is Screen.BookingSuccess -> {
+            com.nmims.careconnect.ui.booking.BookingSuccessScreen(
+                bookingId = current.bookingId,
+                onNavigateToMyBookings = {
+                    // Temporary toast until Commit 8 implements MyBookingsScreen
                     navController.resetTo(Screen.PatientHome)
-                    Toast.makeText(
-                        context,
-                        "Lab booking confirmed: ${bookingId.take(8).uppercase()}",
-                        Toast.LENGTH_LONG
-                    ).show()
+                    Toast.makeText(context, "Navigating to My Bookings", Toast.LENGTH_SHORT).show()
+                },
+                onNavigateToHome = {
+                    navController.resetTo(Screen.PatientHome)
                 }
             )
         }
