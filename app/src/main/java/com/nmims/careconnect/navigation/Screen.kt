@@ -34,5 +34,6 @@ sealed class Screen {
     data class HospitalDetail(val hospitalId: String) : Screen()
     data class DoctorDetail(val doctorId: String) : Screen()
     data class BookAppointment(val doctorId: String) : Screen()
+    data object BookLabTest : Screen()
     data class Compare(val doctorIds: List<String>) : Screen()
 }

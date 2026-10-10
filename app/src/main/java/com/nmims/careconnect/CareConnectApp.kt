@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import com.nmims.careconnect.data.repository.HospitalRepository
 import com.nmims.careconnect.ui.common.LoadingIndicator
 import com.nmims.careconnect.ui.booking.BookAppointmentScreen
+import com.nmims.careconnect.ui.booking.BookLabTestScreen
 
 @Composable
 fun CareConnectApp(
@@ -219,6 +220,22 @@ fun CareConnectApp(
                     Toast.makeText(
                         context,
                         "Booking confirmed: ${bookingId.take(8).uppercase()}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            )
+        }
+        is Screen.BookLabTest -> {
+            BookLabTestScreen(
+                onNavigateBack = { navController.back() },
+                onCreateProfile = {
+                    navController.navigate(Screen.EditProfile)
+                },
+                onBookingSuccess = { bookingId ->
+                    navController.resetTo(Screen.PatientHome)
+                    Toast.makeText(
+                        context,
+                        "Lab booking confirmed: ${bookingId.take(8).uppercase()}",
                         Toast.LENGTH_LONG
                     ).show()
                 }
