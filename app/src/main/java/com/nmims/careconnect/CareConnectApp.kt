@@ -123,7 +123,23 @@ fun CareConnectApp(
             PatientHomeScreen(
                 onNavigateToPortfolio = { navController.navigate(Screen.Portfolio) },
                 onNavigateToSearch = { navController.navigate(Screen.Search) },
+                onNavigateToBookingHub = { navController.navigate(Screen.BookingHub) },
+                onNavigateToMyBookings = { navController.navigate(Screen.MyBookings) },
                 onLogout = { navController.resetTo(Screen.RoleSelection) }
+            )
+        }
+        is Screen.BookingHub -> {
+            com.nmims.careconnect.ui.booking.BookingHubScreen(
+                onNavigateBack = { navController.back() },
+                onNavigateToDoctorSearch = {
+                    navController.navigate(Screen.Search(initialTab = 1))
+                },
+                onNavigateToLabBooking = {
+                    navController.navigate(Screen.BookLabTest)
+                },
+                onNavigateToMyBookings = {
+                    navController.navigate(Screen.MyBookings)
+                }
             )
         }
         is Screen.DoctorHome -> {
@@ -214,7 +230,8 @@ fun CareConnectApp(
             DoctorDetailScreen(
                 doctorId = current.doctorId,
                 onNavigateBack = { navController.back() },
-                onHospitalClick = { hospitalId -> navController.navigate(Screen.HospitalDetail(hospitalId)) }
+                onHospitalClick = { hospitalId -> navController.navigate(Screen.HospitalDetail(hospitalId)) },
+                onBookClick = { doctorId -> navController.navigate(Screen.BookAppointment(doctorId)) }
             )
         }
         is Screen.BookAppointment -> {
@@ -268,7 +285,8 @@ fun CareConnectApp(
         is Screen.Compare -> {
             CompareScreen(
                 doctorIds = current.doctorIds,
-                onNavigateBack = { navController.back() }
+                onNavigateBack = { navController.back() },
+                onBookClick = { doctorId -> navController.navigate(Screen.BookAppointment(doctorId)) }
             )
         }
     }

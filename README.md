@@ -15,8 +15,21 @@ CareConnect is divided into 4 cohesive modules developed across project phases:
 | :--- | :--- | :--- | :--- |
 | **Module 1** | **Medical Portfolio Management & Foundation** (Profile, Medical Records, Documents, Sharing Summary) | Completed (Phase 1) | Person 1 |
 | **Module 2** | **Hospital & Doctor Search and Comparison** (Discovery, Specialties, Filtering, Doctor Profiles, Comparison Table) | Completed (Phase 2) | Person 2 |
-| **Module 3** | **OPD Appointment & Test Booking** (Slot Selection, Lab Tests, Booking Management, Rescheduling) | Upcoming (Phase 3) | Person 3 |
+| **Module 3** | **OPD Appointment & Test Booking** (Slot Selection, Lab Tests, Booking Management, Rescheduling) | Completed (Phase 3 Part C) | Person 3 |
 | **Module 4** | **Automated Hospital Admission & Admin Dashboard** (Direct Admission, Bed Allotment, Admin Analytics) | Upcoming (Phase 4) | Person 4 |
+
+## Phase 3 Part C — Booking Module Features
+- **OPD Doctor Appointment Booking**: Book specialist consultations across partner Mumbai hospitals with automated date picker validation, doctor availability checking, slot chips, reason capture, and portfolio consent.
+- **Diagnostic Lab Test & Scan Booking**: Schedule 15 catalogued diagnostic blood tests and radiological scans with real-time turnaround times, pricing, and fasting instructions confirmation dialog.
+- **Booking Confirmation & Broadcast**: Dedicated `BookingSuccessScreen` displaying booking reference code, date/time, and hospital details. Upon booking confirmation, `BookingBroadcastReceiver` fires a `com.nmims.careconnect.BOOKING_CONFIRMED` broadcast received by `MainActivity` displaying an instant notification Toast.
+- **My Bookings History**: Tabbed tracking for Upcoming and Past OPD appointments and lab test bookings with real-time status chips and detailed information in `BookingDetailScreen`.
+- **Booking Cancellation**: Self-service cancellation for confirmed future bookings with dialog confirmation via `BookingRepository.cancel()`.
+- **Doctor Identity Selection**: Role login allows doctors to select and verify their identity from the hospital directory into `AppSession.currentDoctorId` and `AppSession.currentHospitalId`.
+- **Doctor Consultation Dashboard**: Dedicated doctor portal with `StatCard` metrics and tabbed appointment management (Today, Upcoming, Completed), filtered strictly for the authenticated doctor.
+- **Consultation Notes & Lifecycle Management**: Doctors can record diagnosis/prescription clinical notes and mark appointments as completed or cancelled.
+- **Data Persistence Architecture**:
+  - Local JSON storage persistence (`bookings.json`) managed via thread-safe `BookingRepository` on `Dispatchers.IO` for Phase 3 Part C.
+  - Planned Cloud Firestore migration in Phase 3 Part D for distributed real-time booking synchronization.
 
 ## Project Team
 - **Course**: Mobile Application Development (702AI0E002)

@@ -72,7 +72,8 @@ import com.nmims.careconnect.ui.theme.CareConnectTheme
 @Composable
 fun CompareScreen(
     doctorIds: List<String>,
-    onNavigateBack: () -> Unit = {}
+    onNavigateBack: () -> Unit = {},
+    onBookClick: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
 
@@ -326,13 +327,7 @@ fun CompareScreen(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Button(
-                                        onClick = {
-                                            Toast.makeText(
-                                                context,
-                                                "Booking module coming soon",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                        },
+                                        onClick = { onBookClick(doctor.id) },
                                         modifier = Modifier.fillMaxWidth(),
                                         shape = RoundedCornerShape(8.dp),
                                         colors = ButtonDefaults.buttonColors(

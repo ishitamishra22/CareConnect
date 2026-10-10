@@ -35,6 +35,7 @@ sealed class Screen {
     data class DoctorDetail(val doctorId: String) : Screen()
     data class BookAppointment(val doctorId: String) : Screen()
     data object BookLabTest : Screen()
+    data object BookingHub : Screen()
     data class BookingSuccess(val bookingId: String) : Screen()
     data object MyBookings : Screen()
     data class BookingDetail(val bookingId: String) : Screen()

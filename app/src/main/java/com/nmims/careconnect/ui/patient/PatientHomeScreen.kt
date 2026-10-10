@@ -76,6 +76,8 @@ data class FeatureItem(
 fun PatientHomeScreen(
     onNavigateToPortfolio: () -> Unit,
     onNavigateToSearch: () -> Unit = {},
+    onNavigateToBookingHub: () -> Unit = {},
+    onNavigateToMyBookings: () -> Unit = {},
     onLogout: () -> Unit
 ) {
     val context = LocalContext.current
@@ -104,13 +106,13 @@ fun PatientHomeScreen(
             title = "Book Appointment / Lab Test",
             subtitle = "Schedule in-person or video consultations and diagnostic lab tests",
             icon = Icons.Default.CalendarMonth,
-            onClick = { comingSoonToast("Appointment & Lab Booking") }
+            onClick = onNavigateToBookingHub
         ),
         FeatureItem(
             title = "My Bookings",
             subtitle = "Track active tokens, appointment slots, test results & past visits",
             icon = Icons.Default.CheckCircleOutline,
-            onClick = { comingSoonToast("My Bookings") }
+            onClick = onNavigateToMyBookings
         ),
         FeatureItem(
             title = "Hospital Admission",

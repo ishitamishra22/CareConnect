@@ -94,7 +94,8 @@ import kotlinx.coroutines.launch
 fun DoctorDetailScreen(
     doctorId: String,
     onNavigateBack: () -> Unit = {},
-    onHospitalClick: (String) -> Unit = {}
+    onHospitalClick: (String) -> Unit = {},
+    onBookClick: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -146,16 +147,9 @@ fun DoctorDetailScreen(
                         .fillMaxWidth()
                         .padding(16.dp)
                 ) {
-                    // Action button kept in one clear place for Phase 3 wiring
                     PrimaryButton(
                         text = "Book Appointment • ₹${doctor.consultationFee}",
-                        onClick = {
-                            Toast.makeText(
-                                context,
-                                "Booking module coming soon",
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        }
+                        onClick = { onBookClick(doctor.id) }
                     )
                 }
             }
