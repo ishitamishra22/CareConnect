@@ -290,6 +290,11 @@ fun BookAppointmentScreen(
                             )
                             if (bookings.add(booking)) {
                                 showConfirmation = false
+                                com.nmims.careconnect.receiver.BookingBroadcastReceiver.sendBroadcast(
+                                    context = context,
+                                    title = "Appointment Confirmed",
+                                    message = "Dr. ${doctor.name} at ${hospital?.name ?: ""}".trim()
+                                )
                                 onBookingSuccess(booking.id)
                             } else {
                                 Toast.makeText(context, "Could not save booking", Toast.LENGTH_LONG).show()

@@ -243,6 +243,11 @@ fun BookLabTestScreen(
                             )
                             if (repository.add(booking)) {
                                 showConfirmation = false
+                                com.nmims.careconnect.receiver.BookingBroadcastReceiver.sendBroadcast(
+                                    context = context,
+                                    title = "Lab Test Confirmed",
+                                    message = "${test.name} at ${hospital.name}"
+                                )
                                 onBookingSuccess(booking.id)
                             } else Toast.makeText(context, "Could not save booking", Toast.LENGTH_LONG).show()
                         } catch (_: Exception) {
