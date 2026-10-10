@@ -128,7 +128,16 @@ fun CareConnectApp(
         }
         is Screen.DoctorHome -> {
             DoctorHomeScreen(
-                onLogout = { navController.resetTo(Screen.RoleSelection) }
+                onLogout = { navController.resetTo(Screen.RoleSelection) },
+                onAppointmentClick = { bookingId ->
+                    navController.navigate(Screen.DoctorAppointmentDetail(bookingId))
+                }
+            )
+        }
+        is Screen.DoctorAppointmentDetail -> {
+            com.nmims.careconnect.ui.doctor.DoctorAppointmentDetailScreen(
+                bookingId = current.bookingId,
+                onNavigateBack = { navController.back() }
             )
         }
         is Screen.AdminHome -> {
