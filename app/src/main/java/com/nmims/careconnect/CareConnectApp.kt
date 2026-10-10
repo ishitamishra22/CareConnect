@@ -235,13 +235,25 @@ fun CareConnectApp(
             com.nmims.careconnect.ui.booking.BookingSuccessScreen(
                 bookingId = current.bookingId,
                 onNavigateToMyBookings = {
-                    // Temporary toast until Commit 8 implements MyBookingsScreen
-                    navController.resetTo(Screen.PatientHome)
-                    Toast.makeText(context, "Navigating to My Bookings", Toast.LENGTH_SHORT).show()
+                    navController.navigate(Screen.MyBookings)
                 },
                 onNavigateToHome = {
                     navController.resetTo(Screen.PatientHome)
                 }
+            )
+        }
+        is Screen.MyBookings -> {
+            com.nmims.careconnect.ui.booking.MyBookingsScreen(
+                onNavigateBack = { navController.back() },
+                onBookingClick = { bookingId ->
+                    navController.navigate(Screen.BookingDetail(bookingId))
+                }
+            )
+        }
+        is Screen.BookingDetail -> {
+            com.nmims.careconnect.ui.booking.BookingDetailScreen(
+                bookingId = current.bookingId,
+                onNavigateBack = { navController.back() }
             )
         }
         is Screen.Compare -> {
