@@ -125,6 +125,8 @@ fun CareConnectApp(
                 onNavigateToSearch = { navController.navigate(Screen.Search) },
                 onNavigateToBookingHub = { navController.navigate(Screen.BookingHub) },
                 onNavigateToMyBookings = { navController.navigate(Screen.MyBookings) },
+                onNavigateToAdmissionForm = { navController.navigate(Screen.AdmissionForm) },
+                onNavigateToMyAdmissions = { navController.navigate(Screen.MyAdmissions) },
                 onLogout = { navController.resetTo(Screen.RoleSelection) }
             )
         }
@@ -158,7 +160,10 @@ fun CareConnectApp(
         }
         is Screen.AdminHome -> {
             AdminHomeScreen(
-                onLogout = { navController.resetTo(Screen.RoleSelection) }
+                onLogout = { navController.resetTo(Screen.RoleSelection) },
+                onAdmissionClick = { admissionId ->
+                    navController.navigate(Screen.AdminAdmissionReview(admissionId))
+                }
             )
         }
         is Screen.Portfolio -> {
@@ -287,6 +292,48 @@ fun CareConnectApp(
                 doctorIds = current.doctorIds,
                 onNavigateBack = { navController.back() },
                 onBookClick = { doctorId -> navController.navigate(Screen.BookAppointment(doctorId)) }
+            )
+        }
+        is Screen.AdmissionForm -> {
+            com.nmims.careconnect.ui.admission.AdmissionFormScreen(
+                onNavigateBack = { navController.back() },
+                onCreateProfile = { navController.navigate(Screen.EditProfile) },
+                onAdmissionSuccess = { admissionId ->
+                    navController.resetTo(Screen.PatientHome)
+                    navController.navigate(Screen.AdmissionSuccess(admissionId))
+                }
+            )
+        }
+        is Screen.AdmissionSuccess -> {
+            com.nmims.careconnect.ui.admission.AdmissionSuccessScreen(
+                admissionId = current.admissionId,
+                onNavigateToMyAdmissions = {
+                    navController.resetTo(Screen.PatientHome)
+                    navController.navigate(Screen.MyAdmissions)
+                },
+                onNavigateToHome = {
+                    navController.resetTo(Screen.PatientHome)
+                }
+            )
+        }
+        is Screen.MyAdmissions -> {
+            com.nmims.careconnect.ui.admission.MyAdmissionsScreen(
+                onNavigateBack = { navController.back() },
+                onAdmissionClick = { admissionId ->
+                    navController.navigate(Screen.AdmissionDetail(admissionId))
+                }
+            )
+        }
+        is Screen.AdmissionDetail -> {
+            com.nmims.careconnect.ui.admission.AdmissionDetailScreen(
+                admissionId = current.admissionId,
+                onNavigateBack = { navController.back() }
+            )
+        }
+        is Screen.AdminAdmissionReview -> {
+            com.nmims.careconnect.ui.admin.AdminAdmissionReviewScreen(
+                admissionId = current.admissionId,
+                onNavigateBack = { navController.back() }
             )
         }
     }

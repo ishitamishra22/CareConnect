@@ -146,6 +146,33 @@ fun AboutScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // Modules Section
+            SectionCard(title = "Modules") {
+                val modules = listOf(
+                    "1. Medical Portfolio Management — Person 1",
+                    "2. Hospital & Doctor Search and Comparison — Person 2",
+                    "3. OPD Appointment & Test Booking — Person 3",
+                    "4. Automated Hospital Admission & Admin Dashboard — Person 4"
+                )
+                modules.forEachIndexed { index, moduleText ->
+                    Text(
+                        text = moduleText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    )
+                    if (index < modules.size - 1) {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 2.dp),
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             // Team Table
             SectionCard(title = "Project Team") {
                 teamMembers.forEachIndexed { index, member ->

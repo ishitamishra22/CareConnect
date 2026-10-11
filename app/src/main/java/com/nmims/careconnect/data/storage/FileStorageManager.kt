@@ -7,8 +7,6 @@ import android.net.Uri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.io.FileInputStream
-import java.io.FileNotFoundException
 import java.io.FileOutputStream
 import java.io.IOException
 
@@ -27,39 +25,6 @@ class FileStorageManager(private val context: Context) {
         dir
     }
 
-    suspend fun writeText(fileName: String, text: String): Boolean = withContext(Dispatchers.IO) {
-        try {
-            context.openFileOutput(fileName, Context.MODE_PRIVATE).use { output ->
-                output.write(text.toByteArray(Charsets.UTF_8))
-            }
-            true
-        } catch (e: IOException) {
-            e.printStackTrace()
-            false
-        }
-    }
-
-    suspend fun readText(fileName: String): String? = withContext(Dispatchers.IO) {
-        try {
-            context.openFileInput(fileName).use { input ->
-                input.bufferedReader(Charsets.UTF_8).use { it.readText() }
-            }
-        } catch (_: FileNotFoundException) {
-            null
-        } catch (e: IOException) {
-            e.printStackTrace()
-            null
-        }
-    }
-
-    fun delete(fileName: String): Boolean {
-        return try {
-            context.deleteFile(fileName)
-        } catch (e: Exception) {
-            e.printStackTrace()
-            false
-        }
-    }
 
     suspend fun saveBitmap(bitmap: Bitmap, fileName: String): String? = withContext(Dispatchers.IO) {
         try {

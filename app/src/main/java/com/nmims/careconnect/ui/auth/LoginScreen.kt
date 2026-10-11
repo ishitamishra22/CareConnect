@@ -34,8 +34,12 @@ import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -57,6 +61,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.nmims.careconnect.data.model.Doctor
+import com.nmims.careconnect.data.model.Hospital
 import com.nmims.careconnect.data.model.UserRole
 import com.nmims.careconnect.data.repository.HospitalRepository
 import com.nmims.careconnect.session.AppSession
@@ -65,6 +70,7 @@ import com.nmims.careconnect.ui.common.PrimaryButton
 import com.nmims.careconnect.ui.common.SectionCard
 import com.nmims.careconnect.ui.theme.CareConnectTheme
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginScreen(
     role: UserRole,
@@ -80,21 +86,30 @@ fun LoginScreen(
     var selectedDoctor by remember { mutableStateOf<Doctor?>(null) }
     var doctorDropdownExpanded by remember { mutableStateOf(false) }
 
+    // Hospital Admin selection state
+    val allHospitals = remember { HospitalRepository.getHospitals() }
+    var selectedHospital by remember { mutableStateOf<Hospital?>(allHospitals.firstOrNull()) }
+    var hospitalDropdownExpanded by remember { mutableStateOf(false) }
+
     // Validation rules:
-    // For PATIENT/ADMIN: not blank, letters & spaces only, min 3 chars
+    // For PATIENT: not blank, letters & spaces only, min 3 chars
     // For DOCTOR: doctor selected from catalogue
+    // For HOSPITAL_ADMIN: name valid and hospital selected
     val trimmed = fullName.trim()
     val isLettersAndSpaces = trimmed.all { it.isLetter() || it.isWhitespace() }
     val isNameValid = trimmed.length >= 3 && isLettersAndSpaces
-    val isValid = if (role == UserRole.DOCTOR) {
-        selectedDoctor != null
-    } else {
-        isNameValid
+    val isValid = when (role) {
+        UserRole.DOCTOR -> selectedDoctor != null
+        UserRole.HOSPITAL_ADMIN -> isNameValid && selectedHospital != null
+        UserRole.PATIENT -> isNameValid
     }
 
     val errorMessage = when {
         role == UserRole.DOCTOR -> {
             if (touched && selectedDoctor == null) "Please select your doctor identity" else null
+        }
+        role == UserRole.HOSPITAL_ADMIN && touched && selectedHospital == null -> {
+            "Please select a hospital to administer"
         }
         !touched -> null
         trimmed.isBlank() -> "Full name is required"
@@ -112,7 +127,7 @@ fun LoginScreen(
     val roleSubtitle = when (role) {
         UserRole.PATIENT -> "Enter your name to access your medical portfolio and bookings"
         UserRole.DOCTOR -> "Select your verified doctor profile from the hospital directory"
-        UserRole.HOSPITAL_ADMIN -> "Enter administrator name to access admissions and beds"
+        UserRole.HOSPITAL_ADMIN -> "Select your hospital and enter admin name to access dashboard"
     }
 
     fun handleContinue() {
@@ -125,6 +140,15 @@ fun LoginScreen(
             AppSession.currentHospitalId = doc.hospitalId
             focusManager.clearFocus()
             onLoginSuccess()
+        } else if (role == UserRole.HOSPITAL_ADMIN) {
+            val hosp = selectedHospital ?: return
+            if (isNameValid) {
+                AppSession.currentRole = UserRole.HOSPITAL_ADMIN
+                AppSession.currentUserName = trimmed
+                AppSession.currentHospitalId = hosp.id
+                focusManager.clearFocus()
+                onLoginSuccess()
+            }
         } else if (isValid) {
             AppSession.currentRole = role
             AppSession.currentUserName = trimmed
@@ -306,6 +330,53 @@ fun LoginScreen(
                     }
                 }
             } else {
+                if (role == UserRole.HOSPITAL_ADMIN) {
+                    ExposedDropdownMenuBox(
+                        expanded = hospitalDropdownExpanded,
+                        onExpandedChange = { hospitalDropdownExpanded = it },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        OutlinedTextField(
+                            value = selectedHospital?.name ?: "Select Hospital",
+                            onValueChange = {},
+                            readOnly = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor(MenuAnchorType.PrimaryNotEditable),
+                            label = { Text("Select Managed Hospital *") },
+                            trailingIcon = {
+                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = hospitalDropdownExpanded)
+                            },
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        ExposedDropdownMenu(
+                            expanded = hospitalDropdownExpanded,
+                            onDismissRequest = { hospitalDropdownExpanded = false }
+                        ) {
+                            allHospitals.forEach { hosp ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Column {
+                                            Text(hosp.name, fontWeight = FontWeight.Bold)
+                                            Text(
+                                                "${hosp.area}, ${hosp.city}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    },
+                                    onClick = {
+                                        selectedHospital = hosp
+                                        hospitalDropdownExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+
                 OutlinedTextField(
                     value = fullName,
                     onValueChange = {
@@ -313,9 +384,11 @@ fun LoginScreen(
                         touched = true
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Full Name") },
+                    label = {
+                        Text(if (role == UserRole.HOSPITAL_ADMIN) "Administrator Name *" else "Full Name *")
+                    },
                     placeholder = {
-                        Text("e.g. Rahul Verma")
+                        Text(if (role == UserRole.HOSPITAL_ADMIN) "e.g. Dr. Suresh Kulkarni" else "e.g. Rahul Verma")
                     },
                     isError = errorMessage != null,
                     supportingText = {

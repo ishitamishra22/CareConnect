@@ -5,17 +5,16 @@ package com.nmims.careconnect.ui.patient
  * Patient dashboard containing:
  * - TopBar with "CareConnect" brand title and a Logout icon (with ConfirmDialog -> AppSession.logout() -> resetTo(RoleSelection))
  * - Greeting: "Hello, <name>"
- * - LazyColumn of 6 feature cards:
+ * - LazyColumn of 6 fully-integrated feature cards:
  *   1. My Medical Portfolio (wired to Screen.Portfolio)
- *   2. Find Hospitals & Doctors (coming soon toast)
- *   3. Book Appointment / Lab Test (coming soon toast)
- *   4. My Bookings (coming soon toast)
- *   5. Hospital Admission (coming soon toast)
- *   6. My Admissions (coming soon toast)
- * Built with a single FeatureCard composable and FeatureItem model for easy extension by teammates.
+ *   2. Find Hospitals & Doctors (wired to Screen.Search)
+ *   3. Book Appointment / Lab Test (wired to Screen.BookingHub)
+ *   4. My Bookings (wired to Screen.MyBookings)
+ *   5. Hospital Admission (wired to Screen.AdmissionForm)
+ *   6. My Admissions (wired to Screen.MyAdmissions)
+ * Built with a single FeatureCard composable and FeatureItem model.
  */
 
-import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -78,16 +77,14 @@ fun PatientHomeScreen(
     onNavigateToSearch: () -> Unit = {},
     onNavigateToBookingHub: () -> Unit = {},
     onNavigateToMyBookings: () -> Unit = {},
+    onNavigateToAdmissionForm: () -> Unit = {},
+    onNavigateToMyAdmissions: () -> Unit = {},
     onLogout: () -> Unit
 ) {
     val context = LocalContext.current
     var showLogoutDialog by remember { mutableStateOf(false) }
 
     val userName = if (AppSession.currentUserName.isNotBlank()) AppSession.currentUserName else "Patient"
-
-    val comingSoonToast: (String) -> Unit = { moduleName ->
-        Toast.makeText(context, "$moduleName module is coming soon in later phases", Toast.LENGTH_SHORT).show()
-    }
 
     val features = listOf(
         FeatureItem(
@@ -118,13 +115,13 @@ fun PatientHomeScreen(
             title = "Hospital Admission",
             subtitle = "Direct admission request, bed allotment & emergency room triage",
             icon = Icons.Default.Hotel,
-            onClick = { comingSoonToast("Hospital Admission") }
+            onClick = onNavigateToAdmissionForm
         ),
         FeatureItem(
             title = "My Admissions",
             subtitle = "View current inpatient status, room allotment & discharge summaries",
             icon = Icons.Default.LocalHospital,
-            onClick = { comingSoonToast("My Admissions") }
+            onClick = onNavigateToMyAdmissions
         )
     )
 

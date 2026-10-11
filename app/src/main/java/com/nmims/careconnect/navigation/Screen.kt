@@ -41,4 +41,11 @@ sealed class Screen {
     data class BookingDetail(val bookingId: String) : Screen()
     data class DoctorAppointmentDetail(val bookingId: String) : Screen()
     data class Compare(val doctorIds: List<String>) : Screen()
+
+    // Phase 4: Automated Hospital Admission & Admin Dashboard
+    data object AdmissionForm : Screen()
+    data class AdmissionSuccess(val admissionId: String) : Screen()
+    data object MyAdmissions : Screen()
+    data class AdmissionDetail(val admissionId: String) : Screen()
+    data class AdminAdmissionReview(val admissionId: String) : Screen()
 }

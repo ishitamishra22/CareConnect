@@ -1,15 +1,12 @@
 package com.nmims.careconnect.data.repository
 
 import android.content.Context
+import com.nmims.careconnect.data.firebase.Collections
+import com.nmims.careconnect.data.firebase.FirebaseProvider
 import com.nmims.careconnect.data.model.Booking
 import com.nmims.careconnect.data.model.BookingStatus
 import com.nmims.careconnect.data.model.BookingType
-import com.nmims.careconnect.data.storage.FileStorageManager
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
-import org.json.JSONArray
+import kotlinx.coroutines.tasks.await
 
 /**
  * Exception thrown when attempting to book an OPD doctor slot that has already been taken.
@@ -17,137 +14,152 @@ import org.json.JSONArray
 class SlotTakenException : Exception("The selected appointment slot has already been booked.")
 
 /**
- * Repository managing OPD appointment and lab test bookings.
- * Temporarily uses local JSON storage ("bookings.json") via FileStorageManager.
- * Runs all I/O strictly on Dispatchers.IO.
+ * Repository managing OPD appointment and lab test bookings backed by Cloud Firestore.
+ * Routes all database operations through FirebaseProvider.safeCall.
+ * Sorts and filters multi-field queries in Kotlin to avoid requiring composite indexes.
  */
 class BookingRepository(context: Context) {
 
-    private val storage = FileStorageManager(context.applicationContext)
-    private val mutex = Mutex()
-    private val fileName = "bookings.json"
+    suspend fun getAll(): List<Booking> {
+        val result = FirebaseProvider.safeCall {
+            val snapshot = FirebaseProvider.db
+                .collection(Collections.BOOKINGS)
+                .get()
+                .await()
 
-    private suspend fun readAllBookings(): MutableList<Booking> = withContext(Dispatchers.IO) {
-        val jsonText = storage.readText(fileName) ?: return@withContext mutableListOf()
-        try {
-            val jsonArray = JSONArray(jsonText)
-            val list = mutableListOf<Booking>()
-            for (i in 0 until jsonArray.length()) {
-                val obj = jsonArray.optJSONObject(i) ?: continue
-                list.add(Booking.fromJson(obj))
-            }
-            list
-        } catch (e: Exception) {
-            e.printStackTrace()
-            mutableListOf()
+            snapshot.documents.mapNotNull { doc ->
+                doc.data?.let { Booking.fromMap(it) }
+            }.sortedByDescending { it.dateMillis }
         }
+        return result.getOrDefault(emptyList())
     }
 
-    private suspend fun saveAllBookings(list: List<Booking>): Boolean = withContext(Dispatchers.IO) {
-        try {
-            val jsonArray = JSONArray()
-            for (booking in list) {
-                jsonArray.put(booking.toJson())
-            }
-            storage.writeText(fileName, jsonArray.toString(2))
-        } catch (e: Exception) {
-            e.printStackTrace()
-            false
-        }
-    }
+    suspend fun getById(id: String): Booking? {
+        if (id.isBlank()) return null
+        val result = FirebaseProvider.safeCall {
+            val snapshot = FirebaseProvider.db
+                .collection(Collections.BOOKINGS)
+                .document(id)
+                .get()
+                .await()
 
-    suspend fun getAll(): List<Booking> = withContext(Dispatchers.IO) {
-        mutex.withLock {
-            readAllBookings().toList()
-        }
-    }
-
-    suspend fun getById(id: String): Booking? = withContext(Dispatchers.IO) {
-        mutex.withLock {
-            readAllBookings().find { it.id == id }
-        }
-    }
-
-    suspend fun getForPatient(patientId: String): List<Booking> = withContext(Dispatchers.IO) {
-        mutex.withLock {
-            readAllBookings()
-                .filter { it.patientId == patientId }
-                .sortedByDescending { it.dateMillis }
-        }
-    }
-
-    suspend fun getForDoctor(doctorId: String): List<Booking> = withContext(Dispatchers.IO) {
-        mutex.withLock {
-            readAllBookings()
-                .filter { it.doctorId == doctorId }
-                .sortedWith(compareBy({ it.dateMillis }, { it.timeSlot }))
-        }
-    }
-
-    suspend fun getForHospital(hospitalId: String): List<Booking> = withContext(Dispatchers.IO) {
-        mutex.withLock {
-            readAllBookings()
-                .filter { it.hospitalId == hospitalId }
-                .sortedByDescending { it.dateMillis }
-        }
-    }
-
-    suspend fun getBookedSlots(doctorId: String, dateMillis: Long): List<String> = withContext(Dispatchers.IO) {
-        mutex.withLock {
-            readAllBookings()
-                .filter {
-                    it.type == BookingType.OPD_APPOINTMENT &&
-                    it.doctorId == doctorId &&
-                    it.dateMillis == dateMillis &&
-                    it.status != BookingStatus.CANCELLED
-                }
-                .map { it.timeSlot }
-        }
-    }
-
-    suspend fun add(booking: Booking): Boolean = withContext(Dispatchers.IO) {
-        mutex.withLock {
-            val currentList = readAllBookings()
-
-            // Check if OPD appointment slot is already taken
-            if (booking.type == BookingType.OPD_APPOINTMENT && booking.doctorId != null) {
-                val isSlotTaken = currentList.any {
-                    it.type == BookingType.OPD_APPOINTMENT &&
-                    it.doctorId == booking.doctorId &&
-                    it.dateMillis == booking.dateMillis &&
-                    it.timeSlot.equals(booking.timeSlot, ignoreCase = true) &&
-                    it.status != BookingStatus.CANCELLED
-                }
-                if (isSlotTaken) {
-                    throw SlotTakenException()
-                }
-            }
-
-            currentList.add(booking)
-            saveAllBookings(currentList)
-        }
-    }
-
-    suspend fun updateStatus(id: String, status: BookingStatus, doctorNote: String? = null): Boolean = withContext(Dispatchers.IO) {
-        mutex.withLock {
-            val currentList = readAllBookings()
-            val index = currentList.indexOfFirst { it.id == id }
-            if (index != -1) {
-                val existing = currentList[index]
-                val updated = existing.copy(
-                    status = status,
-                    doctorNote = doctorNote ?: existing.doctorNote
-                )
-                currentList[index] = updated
-                saveAllBookings(currentList)
+            if (snapshot.exists()) {
+                snapshot.data?.let { Booking.fromMap(it) }
             } else {
-                false
+                null
             }
         }
+        return result.getOrNull()
     }
 
-    suspend fun cancel(id: String): Boolean = withContext(Dispatchers.IO) {
-        updateStatus(id, BookingStatus.CANCELLED)
+    suspend fun getForPatient(patientId: String): List<Booking> {
+        if (patientId.isBlank()) return emptyList()
+        val result = FirebaseProvider.safeCall {
+            val snapshot = FirebaseProvider.db
+                .collection(Collections.BOOKINGS)
+                .whereEqualTo("patientId", patientId)
+                .get()
+                .await()
+
+            snapshot.documents.mapNotNull { doc ->
+                doc.data?.let { Booking.fromMap(it) }
+            }.sortedByDescending { it.dateMillis }
+        }
+        return result.getOrDefault(emptyList())
+    }
+
+    suspend fun getForDoctor(doctorId: String): List<Booking> {
+        if (doctorId.isBlank()) return emptyList()
+        val result = FirebaseProvider.safeCall {
+            val snapshot = FirebaseProvider.db
+                .collection(Collections.BOOKINGS)
+                .whereEqualTo("doctorId", doctorId)
+                .get()
+                .await()
+
+            snapshot.documents.mapNotNull { doc ->
+                doc.data?.let { Booking.fromMap(it) }
+            }.sortedWith(compareBy({ it.dateMillis }, { it.timeSlot }))
+        }
+        return result.getOrDefault(emptyList())
+    }
+
+    suspend fun getForHospital(hospitalId: String): List<Booking> {
+        if (hospitalId.isBlank()) return emptyList()
+        val result = FirebaseProvider.safeCall {
+            val snapshot = FirebaseProvider.db
+                .collection(Collections.BOOKINGS)
+                .whereEqualTo("hospitalId", hospitalId)
+                .get()
+                .await()
+
+            snapshot.documents.mapNotNull { doc ->
+                doc.data?.let { Booking.fromMap(it) }
+            }.sortedByDescending { it.dateMillis }
+        }
+        return result.getOrDefault(emptyList())
+    }
+
+    suspend fun getBookedSlots(doctorId: String, dateMillis: Long): List<String> {
+        if (doctorId.isBlank()) return emptyList()
+        val result = FirebaseProvider.safeCall {
+            val snapshot = FirebaseProvider.db
+                .collection(Collections.BOOKINGS)
+                .whereEqualTo("doctorId", doctorId)
+                .get()
+                .await()
+
+            snapshot.documents.mapNotNull { doc ->
+                doc.data?.let { Booking.fromMap(it) }
+            }.filter {
+                it.type == BookingType.OPD_APPOINTMENT &&
+                        it.dateMillis == dateMillis &&
+                        it.status != BookingStatus.CANCELLED
+            }.map { it.timeSlot }
+        }
+        return result.getOrDefault(emptyList())
+    }
+
+    suspend fun add(booking: Booking): Boolean {
+        // Slot collision verification for OPD doctor appointments
+        if (booking.type == BookingType.OPD_APPOINTMENT && booking.doctorId != null) {
+            val currentBookedSlots = getBookedSlots(booking.doctorId, booking.dateMillis)
+            val isSlotTaken = currentBookedSlots.any { it.equals(booking.timeSlot, ignoreCase = true) }
+            if (isSlotTaken) {
+                throw SlotTakenException()
+            }
+        }
+
+        val result = FirebaseProvider.safeCall {
+            FirebaseProvider.db
+                .collection(Collections.BOOKINGS)
+                .document(booking.id)
+                .set(booking.toMap())
+                .await()
+            true
+        }
+        return result.getOrDefault(false)
+    }
+
+    suspend fun updateStatus(id: String, status: BookingStatus, doctorNote: String? = null): Boolean {
+        if (id.isBlank()) return false
+        val result = FirebaseProvider.safeCall {
+            val updates = mutableMapOf<String, Any?>("status" to status.name)
+            if (doctorNote != null) {
+                updates["doctorNote"] = doctorNote
+            }
+            FirebaseProvider.db
+                .collection(Collections.BOOKINGS)
+                .document(id)
+                .update(updates)
+                .await()
+            true
+        }
+        return result.getOrDefault(false)
+    }
+
+    suspend fun cancel(id: String): Boolean {
+        return updateStatus(id, BookingStatus.CANCELLED)
     }
 }
 

@@ -40,6 +40,25 @@ data class Booking(
 ) {
     fun referenceCode(): String = id.take(8).uppercase()
 
+    fun toMap(): Map<String, Any?> {
+        return mapOf(
+            "id" to id,
+            "type" to type.name,
+            "patientId" to patientId,
+            "patientName" to patientName,
+            "hospitalId" to hospitalId,
+            "doctorId" to doctorId,
+            "labTestId" to labTestId,
+            "dateMillis" to dateMillis,
+            "timeSlot" to timeSlot,
+            "reason" to reason,
+            "sharedPortfolioText" to sharedPortfolioText,
+            "status" to status.name,
+            "createdAtMillis" to createdAtMillis,
+            "doctorNote" to doctorNote
+        )
+    }
+
     fun toJson(): JSONObject {
         val json = JSONObject()
         json.put("id", id)
@@ -60,6 +79,39 @@ data class Booking(
     }
 
     companion object {
+        fun fromMap(map: Map<String, Any?>): Booking {
+            val typeEnum = try {
+                val str = map["type"] as? String ?: BookingType.OPD_APPOINTMENT.name
+                BookingType.valueOf(str)
+            } catch (_: Exception) {
+                BookingType.OPD_APPOINTMENT
+            }
+
+            val statusEnum = try {
+                val str = map["status"] as? String ?: BookingStatus.CONFIRMED.name
+                BookingStatus.valueOf(str)
+            } catch (_: Exception) {
+                BookingStatus.CONFIRMED
+            }
+
+            return Booking(
+                id = map["id"] as? String ?: "",
+                type = typeEnum,
+                patientId = map["patientId"] as? String ?: "",
+                patientName = map["patientName"] as? String ?: "",
+                hospitalId = map["hospitalId"] as? String ?: "",
+                doctorId = map["doctorId"] as? String,
+                labTestId = map["labTestId"] as? String,
+                dateMillis = (map["dateMillis"] as? Number)?.toLong() ?: 0L,
+                timeSlot = map["timeSlot"] as? String ?: "",
+                reason = map["reason"] as? String ?: "",
+                sharedPortfolioText = map["sharedPortfolioText"] as? String ?: "",
+                status = statusEnum,
+                createdAtMillis = (map["createdAtMillis"] as? Number)?.toLong() ?: 0L,
+                doctorNote = map["doctorNote"] as? String ?: ""
+            )
+        }
+
         fun fromJson(json: JSONObject): Booking {
             val doctorIdStr = if (json.isNull("doctorId")) null else json.optString("doctorId").takeIf { it.isNotBlank() }
             val labTestIdStr = if (json.isNull("labTestId")) null else json.optString("labTestId").takeIf { it.isNotBlank() }
