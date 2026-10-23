@@ -51,16 +51,24 @@ data class InsuranceDetails(
 
     companion object {
         fun fromMap(map: Map<String, Any?>): InsuranceDetails {
+            val validTill = (map["validTillMillis"] as? Number)?.toLong()
+                ?: (map["validTillMillis"] as? String)?.toLongOrNull()
+                ?: (map["validityDateMillis"] as? Number)?.toLong()
+                ?: (map["validityDateMillis"] as? String)?.toLongOrNull()
+                ?: 0L
+
+            val sum = (map["sumInsured"] as? Number)?.toInt()
+                ?: (map["sumInsured"] as? String)?.toIntOrNull()
+                ?: 0
+
             return InsuranceDetails(
                 providerName = map["providerName"] as? String ?: "",
                 policyNumber = map["policyNumber"] as? String ?: "",
                 policyHolderName = map["policyHolderName"] as? String
                     ?: map["policyholderName"] as? String
                     ?: "",
-                validTillMillis = (map["validTillMillis"] as? Number)?.toLong()
-                    ?: (map["validityDateMillis"] as? Number)?.toLong()
-                    ?: 0L,
-                sumInsured = (map["sumInsured"] as? Number)?.toInt() ?: 0
+                validTillMillis = validTill,
+                sumInsured = sum
             )
         }
     }
@@ -215,11 +223,46 @@ data class Admission(
             val insuranceObj = insuranceMap?.let { InsuranceDetails.fromMap(it) }
 
             val statusEnum = try {
-                val statusStr = map["status"] as? String ?: AdmissionStatus.PENDING.name
-                AdmissionStatus.valueOf(statusStr)
+                val statusRaw = map["status"]
+                if (statusRaw is AdmissionStatus) {
+                    statusRaw
+                } else {
+                    val statusStr = statusRaw?.toString()?.trim() ?: AdmissionStatus.PENDING.name
+                    AdmissionStatus.entries.find {
+                        it.name.equals(statusStr, ignoreCase = true) || it.label.equals(statusStr, ignoreCase = true)
+                    } ?: AdmissionStatus.PENDING
+                }
             } catch (_: Exception) {
                 AdmissionStatus.PENDING
             }
+
+            val prefDate = (map["preferredDateMillis"] as? Number)?.toLong()
+                ?: (map["preferredDateMillis"] as? String)?.toLongOrNull()
+                ?: 0L
+
+            val stayDays = (map["expectedStayDays"] as? Number)?.toInt()
+                ?: (map["expectedStayDays"] as? String)?.toIntOrNull()
+                ?: 1
+
+            val price = (map["pricePerDay"] as? Number)?.toInt()
+                ?: (map["pricePerDay"] as? String)?.toIntOrNull()
+                ?: (map["roomPricePerDay"] as? Number)?.toInt()
+                ?: (map["roomPricePerDay"] as? String)?.toIntOrNull()
+                ?: 0
+
+            val cost = (map["estimatedCost"] as? Number)?.toInt()
+                ?: (map["estimatedCost"] as? String)?.toIntOrNull()
+                ?: 0
+
+            val age = (map["patientAge"] as? Number)?.toInt()
+                ?: (map["patientAge"] as? String)?.toIntOrNull()
+                ?: (map["age"] as? Number)?.toInt()
+                ?: (map["age"] as? String)?.toIntOrNull()
+                ?: 0
+
+            val created = (map["createdAtMillis"] as? Number)?.toLong()
+                ?: (map["createdAtMillis"] as? String)?.toLongOrNull()
+                ?: 0L
 
             return Admission(
                 id = map["id"] as? String ?: "",
@@ -230,16 +273,14 @@ data class Admission(
                     ?: map["reason"] as? String
                     ?: "",
                 referringDoctor = map["referringDoctor"] as? String,
-                preferredDateMillis = (map["preferredDateMillis"] as? Number)?.toLong() ?: 0L,
-                expectedStayDays = (map["expectedStayDays"] as? Number)?.toInt() ?: 1,
+                preferredDateMillis = prefDate,
+                expectedStayDays = stayDays,
                 roomTypeName = map["roomTypeName"] as? String
                     ?: map["roomType"] as? String
                     ?: "",
-                pricePerDay = (map["pricePerDay"] as? Number)?.toInt()
-                    ?: (map["roomPricePerDay"] as? Number)?.toInt()
-                    ?: 0,
-                estimatedCost = (map["estimatedCost"] as? Number)?.toInt() ?: 0,
-                patientAge = (map["patientAge"] as? Number)?.toInt() ?: 0,
+                pricePerDay = price,
+                estimatedCost = cost,
+                patientAge = age,
                 gender = map["gender"] as? String
                     ?: map["patientGender"] as? String
                     ?: "",
@@ -265,7 +306,7 @@ data class Admission(
                 assignedRoomNumber = map["assignedRoomNumber"] as? String
                     ?: map["assignedRoom"] as? String,
                 adminRemark = map["adminRemark"] as? String,
-                createdAtMillis = (map["createdAtMillis"] as? Number)?.toLong() ?: 0L
+                createdAtMillis = created
             )
         }
     }
