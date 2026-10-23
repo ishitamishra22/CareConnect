@@ -5,8 +5,9 @@ import com.nmims.careconnect.data.firebase.Collections
 import com.nmims.careconnect.data.firebase.FirebaseProvider
 import com.nmims.careconnect.data.model.Admission
 import com.nmims.careconnect.data.model.AdmissionStatus
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 
 /**
@@ -124,16 +125,69 @@ class AdmissionRepository(context: Context) {
         return result.getOrDefault(false)
     }
 
-    /**
-     * Stubs for real-time observation to maintain project compilation.
-     * Full Firestore snapshot listener implementation is deferred to Milestone 4.
-     */
-    fun observeForPatient(patientId: String): Flow<List<Admission>> = flow {
-        emit(getForPatient(patientId))
+    fun observeForPatient(patientId: String): Flow<List<Admission>> = callbackFlow {
+        if (patientId.isBlank()) {
+            trySend(emptyList())
+            close()
+            return@callbackFlow
+        }
+
+        val registration = FirebaseProvider.db
+            .collection(Collections.ADMISSIONS)
+            .whereEqualTo("patientId", patientId)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    return@addSnapshotListener
+                }
+                if (snapshot != null) {
+                    val list = snapshot.documents.mapNotNull { doc ->
+                        try {
+                            doc.data?.let { Admission.fromMap(it) }
+                        } catch (_: Exception) {
+                            null
+                        }
+                    }.sortedByDescending { it.createdAtMillis }
+                    trySend(list)
+                }
+            }
+
+        awaitClose {
+            registration.remove()
+        }
     }
 
-    fun observeForHospital(hospitalId: String): Flow<List<Admission>> = flow {
-        emit(getForHospital(hospitalId))
+    fun observeForHospital(hospitalId: String): Flow<List<Admission>> = callbackFlow {
+        if (hospitalId.isBlank()) {
+            trySend(emptyList())
+            close()
+            return@callbackFlow
+        }
+
+        val registration = FirebaseProvider.db
+            .collection(Collections.ADMISSIONS)
+            .whereEqualTo("hospitalId", hospitalId)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    return@addSnapshotListener
+                }
+                if (snapshot != null) {
+                    val list = snapshot.documents.mapNotNull { doc ->
+                        try {
+                            doc.data?.let { Admission.fromMap(it) }
+                        } catch (_: Exception) {
+                            null
+                        }
+                    }.sortedWith(
+                        compareBy<Admission> { it.status != AdmissionStatus.PENDING }
+                            .thenBy { it.preferredDateMillis }
+                    )
+                    trySend(list)
+                }
+            }
+
+        awaitClose {
+            registration.remove()
+        }
     }
 }
 
