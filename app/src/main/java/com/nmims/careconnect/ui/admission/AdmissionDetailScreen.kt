@@ -15,6 +15,7 @@ package com.nmims.careconnect.ui.admission
  * - Extracted stateless AdmissionDetailContent with isolated Compose Previews
  */
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
@@ -37,6 +38,7 @@ import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.HourglassTop
 import androidx.compose.material.icons.filled.LocalHospital
@@ -45,6 +47,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -60,7 +63,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -165,6 +170,7 @@ fun AdmissionDetailContent(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
     Scaffold(
         topBar = {
             CareTopBar(
@@ -312,11 +318,35 @@ fun AdmissionDetailContent(
                                     )
                                 }
                                 Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "Ref: ${record.referenceCode()} • Submitted ${DateUtils.format(record.createdAtMillis)}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Ref: ${record.referenceCode()} • Submitted ${DateUtils.format(record.createdAtMillis)}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.weight(1f, fill = false)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    IconButton(
+                                        onClick = {
+                                            clipboardManager.setText(AnnotatedString(record.referenceCode()))
+                                            Toast.makeText(
+                                                context,
+                                                "Reference code copied to clipboard",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.ContentCopy,
+                                            contentDescription = "Copy Reference Code",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
                             }
                             StatusChip(
                                 text = record.status.label,
@@ -527,20 +557,7 @@ fun AdmissionDetailContent(
 
                             if (hasValidPhone) {
                                 Button(
-                                    onClick = {
-                                        try {
-                                            val dialIntent = Intent(Intent.ACTION_DIAL).apply {
-                                                data = Uri.parse("tel:$cleanPhone")
-                                            }
-                                            context.startActivity(dialIntent)
-                                        } catch (_: Exception) {
-                                            Toast.makeText(
-                                                context,
-                                                "Unable to launch phone dialer",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                        }
-                                    },
+                                    onClick = { launchDialer(context, cleanPhone) },
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(10.dp)
                                 ) {
@@ -639,6 +656,53 @@ fun AdmissionDetailContent(
                         DetailItem("Phone", record.patientPhone)
                         DetailItem("Address", record.patientAddress)
                         DetailItem("Emergency Contact", "${record.emergencyContactName} (${record.emergencyContactPhone})")
+
+                        val validEmergencyPhone = remember(record.emergencyContactPhone) {
+                            sanitizeAndValidatePhone(record.emergencyContactPhone)
+                        }
+                        val validPatientPhone = remember(record.patientPhone) {
+                            sanitizeAndValidatePhone(record.patientPhone)
+                        }
+
+                        if (validEmergencyPhone != null || validPatientPhone != null) {
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            if (validEmergencyPhone != null) {
+                                Button(
+                                    onClick = { launchDialer(context, validEmergencyPhone) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Call,
+                                        contentDescription = "Call Emergency Contact",
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Call Emergency Contact", style = MaterialTheme.typography.labelLarge)
+                                }
+                            }
+
+                            if (validEmergencyPhone != null && validPatientPhone != null) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                            }
+
+                            if (validPatientPhone != null) {
+                                OutlinedButton(
+                                    onClick = { launchDialer(context, validPatientPhone) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Call,
+                                        contentDescription = "Call Patient",
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Call Patient", style = MaterialTheme.typography.labelLarge)
+                                }
+                            }
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -692,6 +756,45 @@ fun AdmissionDetailContent(
                 }
             }
         }
+    }
+}
+
+/**
+ * Sanitizes and validates a phone number string for telephony actions.
+ * - Strips common formatting separators (spaces, hyphens, parentheses, periods).
+ * - Requires at least 7 numeric digits.
+ * - Rejects malformed values: multiple '+' characters, or '+' appearing anywhere other than index 0.
+ * - Rejects non-numeric characters.
+ * - Returns sanitized dialable string (e.g. "+919820012345" or "02226751000") or null if invalid.
+ */
+private fun sanitizeAndValidatePhone(raw: String?): String? {
+    if (raw.isNullOrBlank()) return null
+    val cleaned = raw.trim().replace(Regex("[\\s\\-().]"), "")
+    if (!cleaned.all { it.isDigit() || it == '+' }) return null
+    val plusCount = cleaned.count { it == '+' }
+    if (plusCount > 1 || (plusCount == 1 && !cleaned.startsWith("+"))) return null
+    val digitCount = cleaned.count { it.isDigit() }
+    if (digitCount < 7) return null
+    if (cleaned.startsWith("+") && !cleaned.substring(1).all { it.isDigit() }) return null
+    return cleaned
+}
+
+/**
+ * Dispatches an implicit Intent.ACTION_DIAL intent with tel: URI.
+ * Safely catches ActivityNotFoundException and other execution failures without crashing.
+ */
+private fun launchDialer(context: Context, phoneNumber: String) {
+    try {
+        val dialIntent = Intent(Intent.ACTION_DIAL).apply {
+            data = Uri.parse("tel:$phoneNumber")
+        }
+        context.startActivity(dialIntent)
+    } catch (_: Exception) {
+        Toast.makeText(
+            context,
+            "Unable to launch phone dialer",
+            Toast.LENGTH_SHORT
+        ).show()
     }
 }
 
