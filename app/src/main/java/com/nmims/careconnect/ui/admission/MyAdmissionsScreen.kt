@@ -78,6 +78,7 @@ import com.nmims.careconnect.ui.common.EmptyState
 import com.nmims.careconnect.ui.common.LoadingIndicator
 import com.nmims.careconnect.ui.common.PrimaryButton
 import com.nmims.careconnect.ui.common.StatusChip
+import com.nmims.careconnect.ui.common.admissionStatusContainerColor
 import com.nmims.careconnect.ui.theme.CareConnectTheme
 import kotlinx.coroutines.flow.catch
 
@@ -350,12 +351,7 @@ private fun AdmissionCard(
         hospitalLookup(admission.hospitalId)
     }
 
-    val statusColor = when (admission.status) {
-        AdmissionStatus.PENDING -> Color(0xFFFFF3CD)
-        AdmissionStatus.APPROVED -> Color(0xFFD1E7DD)
-        AdmissionStatus.REJECTED -> Color(0xFFF8D7DA)
-        AdmissionStatus.DISCHARGED -> Color(0xFFE2E3E5)
-    }
+    val statusColor = admissionStatusContainerColor(admission.status)
 
     OutlinedCard(
         onClick = onClick,
