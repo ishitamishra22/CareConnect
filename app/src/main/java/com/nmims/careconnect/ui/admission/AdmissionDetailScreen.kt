@@ -84,6 +84,7 @@ import com.nmims.careconnect.ui.common.EmptyState
 import com.nmims.careconnect.ui.common.LoadingIndicator
 import com.nmims.careconnect.ui.common.SectionCard
 import com.nmims.careconnect.ui.common.StatusChip
+import com.nmims.careconnect.ui.common.admissionStatusContainerColor
 import com.nmims.careconnect.ui.theme.CareConnectTheme
 
 sealed interface AdmissionDetailUiState {
@@ -276,12 +277,7 @@ fun AdmissionDetailContent(
             is AdmissionDetailUiState.Success -> {
                 val record = uiState.admission
                 val hospital = remember(record.hospitalId) { hospitalLookup(record.hospitalId) }
-                val statusColor = when (record.status) {
-                    AdmissionStatus.PENDING -> Color(0xFFFFF3CD)
-                    AdmissionStatus.APPROVED -> Color(0xFFD1E7DD)
-                    AdmissionStatus.REJECTED -> Color(0xFFF8D7DA)
-                    AdmissionStatus.DISCHARGED -> Color(0xFFE2E3E5)
-                }
+                val statusColor = admissionStatusContainerColor(record.status)
 
                 Column(
                     modifier = Modifier
@@ -396,7 +392,7 @@ fun AdmissionDetailContent(
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Surface(
                                     shape = RoundedCornerShape(10.dp),
-                                    color = Color(0xFFFFF3CD),
+                                    color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f),
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Row(
@@ -406,7 +402,7 @@ fun AdmissionDetailContent(
                                         Icon(
                                             imageVector = Icons.Default.HourglassTop,
                                             contentDescription = null,
-                                            tint = Color(0xFF856404),
+                                            tint = MaterialTheme.colorScheme.tertiary,
                                             modifier = Modifier.size(22.dp)
                                         )
                                         Spacer(modifier = Modifier.width(10.dp))
@@ -415,12 +411,12 @@ fun AdmissionDetailContent(
                                                 text = "Admission Under Review",
                                                 style = MaterialTheme.typography.titleSmall,
                                                 fontWeight = FontWeight.Bold,
-                                                color = Color(0xFF856404)
+                                                color = MaterialTheme.colorScheme.onTertiaryContainer
                                             )
                                             Text(
                                                 text = "Hospital administration is reviewing clinical details and preparing bed allotment.",
                                                 style = MaterialTheme.typography.bodySmall,
-                                                color = Color(0xFF856404).copy(alpha = 0.85f)
+                                                color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.85f)
                                             )
                                         }
                                     }
