@@ -6,8 +6,8 @@ package com.nmims.careconnect.ui.admin
  * - Restricted strictly to authenticated UserRole.HOSPITAL_ADMIN sessions with nonblank AppSession.currentHospitalId
  * - Enforces Unauthenticated and Unauthorized security gates before starting or exposing any data streams
  * - Real-time statistics: Pending Admissions, Approved Admissions, Appointments Today, Lab Tests Today
- * - Quick-filter activation by tapping Pending or Approved statistic cards
- * - Three-tab layout via TabRow:
+ * - Interactive quick-filter activation by tapping Pending, Approved, OPD, or Lab statistic cards
+ * - Three-tab layout via modern TabRow with pill count badges:
  *   1. Admissions: Real-time list of hospital admission requests via AdmissionRepository.observeForHospital(),
  *      supporting status filter chips (All, Pending, Approved, Rejected, Discharged) with dynamic item counts.
  *   2. Appointments: Hospital OPD bookings grouped and sorted by date with doctor, patient, slot, and status.
@@ -15,11 +15,13 @@ package com.nmims.careconnect.ui.admin
  *      and duplicate-submission lock.
  * - Enriched admission request cards displaying demographics, room type, stay duration, estimated cost,
  *   insurance coverage / self-pay designation, assigned room banner, and administrative rejection remarks.
+ * - TopBar with instant theme mode toggle and secure logout confirmation.
  * - Independent, recoverable loading and error states with functional retry mechanisms.
  * - Stateless AdminHomeContent with isolated Compose Previews using in-memory mock data.
  */
 
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -44,17 +46,25 @@ import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Biotech
 import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.BrightnessAuto
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Hotel
 import androidx.compose.material.icons.filled.HourglassTop
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.MeetingRoom
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
@@ -66,6 +76,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
+import androidx.compose.material3.TabRowDefaults
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -78,10 +90,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.nmims.careconnect.data.model.Admission
@@ -104,10 +116,16 @@ import com.nmims.careconnect.ui.common.CareTopBar
 import com.nmims.careconnect.ui.common.ConfirmDialog
 import com.nmims.careconnect.ui.common.DateUtils
 import com.nmims.careconnect.ui.common.EmptyState
+import com.nmims.careconnect.ui.common.LabelChip
 import com.nmims.careconnect.ui.common.LoadingIndicator
 import com.nmims.careconnect.ui.common.StatCard
 import com.nmims.careconnect.ui.common.StatusChip
+import com.nmims.careconnect.ui.common.admissionStatusContainerColor
+import com.nmims.careconnect.ui.common.bookingStatusContainerColor
 import com.nmims.careconnect.ui.theme.CareConnectTheme
+import com.nmims.careconnect.ui.theme.LocalSetThemeMode
+import com.nmims.careconnect.ui.theme.LocalThemeMode
+import com.nmims.careconnect.ui.theme.ThemeMode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
@@ -246,7 +264,7 @@ fun AdminHomeScreen(
                         bookingsError = null
                     } catch (e: CancellationException) {
                         throw e
-                    } catch (e: Exception) {
+                    } catch (_: Exception) {
                         // Preserve existing bookings list on background refresh failure
                     }
                 }
@@ -363,6 +381,9 @@ fun AdminHomeContent(
     labTestLookup: (String) -> LabTest? = { LabTestRepository.getTest(it) },
     modifier: Modifier = Modifier
 ) {
+    val currentThemeMode = LocalThemeMode.current
+    val setThemeMode = LocalSetThemeMode.current
+
     // Statistics computations
     val pendingAdmissionsCount = admissions?.count { it.status == AdmissionStatus.PENDING } ?: 0
     val approvedAdmissionsCount = admissions?.count { it.status == AdmissionStatus.APPROVED } ?: 0
@@ -385,6 +406,26 @@ fun AdminHomeContent(
             CareTopBar(
                 title = "Hospital Admin",
                 actions = {
+                    IconButton(
+                        onClick = {
+                            val nextMode = when (currentThemeMode) {
+                                ThemeMode.LIGHT -> ThemeMode.DARK
+                                ThemeMode.DARK -> ThemeMode.SYSTEM
+                                ThemeMode.SYSTEM -> ThemeMode.LIGHT
+                            }
+                            setThemeMode(nextMode)
+                        }
+                    ) {
+                        Icon(
+                            imageVector = when (currentThemeMode) {
+                                ThemeMode.LIGHT -> Icons.Default.LightMode
+                                ThemeMode.DARK -> Icons.Default.DarkMode
+                                ThemeMode.SYSTEM -> Icons.Default.BrightnessAuto
+                            },
+                            contentDescription = "Switch theme (${currentThemeMode.label})",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
                     IconButton(onClick = onLogoutClick) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ExitToApp,
@@ -402,96 +443,171 @@ fun AdminHomeContent(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // Header Info
-            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                Text(
-                    text = "${hospital?.name ?: "Hospital"} Admin",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "$adminName • Inpatient admissions & resource desk",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            // Enhanced Hospital & Admin Identity Header
+            OutlinedCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.outlinedCardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Text(
+                        text = hospital?.name ?: "Hospital Console",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Security,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "$adminName • Inpatient & Resource Console",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    if (hospital != null) {
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.LocalHospital,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "${hospital.area}, ${hospital.city}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
             }
 
             // Stat Cards Row with interactive filter activation
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 StatCard(
                     label = "Pending",
                     value = if (admissionsLoading && admissions == null) "—" else pendingAdmissionsCount.toString(),
                     icon = Icons.Default.HourglassTop,
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable {
-                            onTabSelect(0)
-                            onFilterSelect(AdmissionFilter.PENDING)
-                        }
+                    isSelected = selectedTab == 0 && selectedAdmissionFilter == AdmissionFilter.PENDING,
+                    onClick = {
+                        onTabSelect(0)
+                        onFilterSelect(AdmissionFilter.PENDING)
+                    },
+                    modifier = Modifier.weight(1f)
                 )
                 StatCard(
                     label = "Approved",
                     value = if (admissionsLoading && admissions == null) "—" else approvedAdmissionsCount.toString(),
                     icon = Icons.Default.CheckCircle,
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable {
-                            onTabSelect(0)
-                            onFilterSelect(AdmissionFilter.APPROVED)
-                        }
+                    isSelected = selectedTab == 0 && selectedAdmissionFilter == AdmissionFilter.APPROVED,
+                    onClick = {
+                        onTabSelect(0)
+                        onFilterSelect(AdmissionFilter.APPROVED)
+                    },
+                    modifier = Modifier.weight(1f)
                 )
                 StatCard(
                     label = "OPD Today",
                     value = if (bookingsLoading && bookings == null) "—" else appointmentsTodayCount.toString(),
                     icon = Icons.Default.CalendarMonth,
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable {
-                            onTabSelect(1)
-                        }
+                    isSelected = selectedTab == 1,
+                    onClick = { onTabSelect(1) },
+                    modifier = Modifier.weight(1f)
                 )
                 StatCard(
                     label = "Lab Today",
                     value = if (bookingsLoading && bookings == null) "—" else labTestsTodayCount.toString(),
                     icon = Icons.Default.Biotech,
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable {
-                            onTabSelect(2)
-                        }
+                    isSelected = selectedTab == 2,
+                    onClick = { onTabSelect(2) },
+                    modifier = Modifier.weight(1f)
                 )
             }
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             // Main Tab Navigation
-            TabRow(selectedTabIndex = selectedTab) {
+            TabRow(
+                selectedTabIndex = selectedTab,
+                containerColor = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.primary,
+                indicator = { tabPositions ->
+                    if (selectedTab < tabPositions.size) {
+                        TabRowDefaults.Indicator(
+                            modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            ) {
                 Tab(
                     selected = selectedTab == 0,
                     onClick = { onTabSelect(0) },
-                    text = { Text("Admissions (${admissions?.size ?: 0})") }
+                    text = {
+                        Text(
+                            text = "Admissions",
+                            fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal,
+                            color = if (selectedTab == 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 )
                 Tab(
                     selected = selectedTab == 1,
                     onClick = { onTabSelect(1) },
                     text = {
-                        val opdCount = bookings?.count { it.type == BookingType.OPD_APPOINTMENT } ?: 0
-                        Text("Appointments ($opdCount)")
+                        Text(
+                            text = "Appointments",
+                            fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal,
+                            color = if (selectedTab == 1) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 )
                 Tab(
                     selected = selectedTab == 2,
                     onClick = { onTabSelect(2) },
                     text = {
-                        val labCount = bookings?.count { it.type == BookingType.LAB_TEST } ?: 0
-                        Text("Lab Tests ($labCount)")
+                        Text(
+                            text = "Lab Tests",
+                            fontWeight = if (selectedTab == 2) FontWeight.Bold else FontWeight.Normal,
+                            color = if (selectedTab == 2) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 )
             }
@@ -561,7 +677,7 @@ private fun AdmissionsTabContent(
             modifier = Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 6.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             AdmissionFilter.entries.forEach { filter ->
@@ -577,6 +693,7 @@ private fun AdmissionsTabContent(
                     selected = isSelected,
                     onClick = { onFilterSelect(filter) },
                     label = { Text("${filter.label} ($count)") },
+                    shape = RoundedCornerShape(12.dp),
                     leadingIcon = if (isSelected) {
                         {
                             Icon(
@@ -601,7 +718,7 @@ private fun AdmissionsTabContent(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 4.dp),
-                shape = RoundedCornerShape(8.dp)
+                shape = RoundedCornerShape(12.dp)
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -635,7 +752,15 @@ private fun AdmissionsTabContent(
         when {
             isLoading && admissions == null -> {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    LoadingIndicator()
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        LoadingIndicator()
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Loading hospital admissions...",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
 
@@ -650,7 +775,10 @@ private fun AdmissionsTabContent(
                         icon = Icons.Default.ErrorOutline,
                         message = "Unable to load admissions.\n\n$errorMessage",
                         action = {
-                            Button(onClick = onRetry) {
+                            Button(
+                                onClick = onRetry,
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
                                 Icon(imageVector = Icons.Default.Refresh, contentDescription = null)
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text("Retry")
@@ -682,7 +810,10 @@ private fun AdmissionsTabContent(
                             icon = Icons.Default.FilterList,
                             message = "No admissions matching the '${selectedFilter.label}' filter.",
                             action = {
-                                OutlinedButton(onClick = { onFilterSelect(AdmissionFilter.ALL) }) {
+                                OutlinedButton(
+                                    onClick = { onFilterSelect(AdmissionFilter.ALL) },
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
                                     Text("Show All Admissions")
                                 }
                             }
@@ -718,7 +849,15 @@ private fun AppointmentsTabContent(
     when {
         isLoading && bookings == null -> {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                LoadingIndicator()
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    LoadingIndicator()
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Loading hospital appointments...",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
 
@@ -733,7 +872,10 @@ private fun AppointmentsTabContent(
                     icon = Icons.Default.ErrorOutline,
                     message = "Unable to load appointments.\n\n$errorMessage",
                     action = {
-                        Button(onClick = onRetry) {
+                        Button(
+                            onClick = onRetry,
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
                             Icon(imageVector = Icons.Default.Refresh, contentDescription = null)
                             Spacer(modifier = Modifier.width(6.dp))
                             Text("Retry")
@@ -799,7 +941,15 @@ private fun LabTestsTabContent(
     when {
         isLoading && bookings == null -> {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                LoadingIndicator()
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    LoadingIndicator()
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Loading diagnostic lab tests...",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
 
@@ -814,7 +964,10 @@ private fun LabTestsTabContent(
                     icon = Icons.Default.ErrorOutline,
                     message = "Unable to load diagnostic lab tests.\n\n$errorMessage",
                     action = {
-                        Button(onClick = onRetry) {
+                        Button(
+                            onClick = onRetry,
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
                             Icon(imageVector = Icons.Default.Refresh, contentDescription = null)
                             Spacer(modifier = Modifier.width(6.dp))
                             Text("Retry")
@@ -858,62 +1011,104 @@ private fun LabTestsTabContent(
 /**
  * Enhanced inpatient admission card with demographics, room type, stay duration,
  * estimated stay cost, insurance coverage badge, assigned room, and rejection remarks.
+ * Styled with 16dp rounded corners and theme-adaptive status container colors.
  */
 @Composable
 private fun AdminAdmissionCard(
     admission: Admission,
     onClick: () -> Unit
 ) {
-    val statusColor = when (admission.status) {
-        AdmissionStatus.PENDING -> Color(0xFFFFF3CD)
-        AdmissionStatus.APPROVED -> Color(0xFFD1E7DD)
-        AdmissionStatus.REJECTED -> Color(0xFFF8D7DA)
-        AdmissionStatus.DISCHARGED -> Color(0xFFE2E3E5)
-    }
+    val statusContainer = admissionStatusContainerColor(admission.status)
 
     OutlinedCard(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp)
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.outlinedCardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            // Header Row: Patient Name & Status Chip
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Header Row: Reference Token & Theme-Adaptive StatusChip
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = admission.patientName,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f)
+                LabelChip(
+                    text = "REF: ${admission.referenceCode()}",
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 )
                 StatusChip(
                     text = admission.status.label,
-                    containerColor = statusColor
+                    containerColor = statusContainer
                 )
             }
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // Demographics: Age, Gender, Blood Group, Phone
-            Text(
-                text = "${admission.patientAge} yrs, ${admission.patientGender} • Blood: ${admission.patientBloodGroup} • Phone: ${admission.patientPhone}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            // Patient Identity Row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = admission.patientName,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "${admission.patientAge} yrs, ${admission.patientGender} • Blood: ${admission.patientBloodGroup}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
 
-            Spacer(modifier = Modifier.height(6.dp))
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = "Review Request",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
 
-            // Admission Reason
-            Text(
-                text = "Reason: ${admission.reason}",
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 2
-            )
+            Spacer(modifier = Modifier.height(10.dp))
 
-            Spacer(modifier = Modifier.height(8.dp))
+            // Admission Reason callout
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Reason: ${admission.reason}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
 
             // Room Type & Preferred Date
             Row(
@@ -924,7 +1119,7 @@ private fun AdminAdmissionCard(
                 Text(
                     text = "${admission.roomType} • ₹${admission.roomPricePerDay}/day",
                     style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Medium,
+                    fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.primary
                 )
                 Text(
@@ -934,7 +1129,7 @@ private fun AdminAdmissionCard(
                 )
             }
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
             // Stay Duration, Estimated Cost, and Insurance Coverage Badge
             Row(
@@ -945,26 +1140,27 @@ private fun AdminAdmissionCard(
                 Text(
                     text = "Stay: ${admission.expectedStayDays} ${if (admission.expectedStayDays == 1) "day" else "days"} • Est: ₹${admission.estimatedCost}",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
 
                 val insurance = admission.insuranceDetails
                 if (insurance != null && insurance.policyNumber.isNotBlank()) {
                     Surface(
-                        shape = RoundedCornerShape(4.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.tertiaryContainer
                     ) {
                         Text(
                             text = "Insurance: ${insurance.providerName}",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                         )
                     }
                 } else {
                     Surface(
-                        shape = RoundedCornerShape(4.dp),
+                        shape = RoundedCornerShape(8.dp),
                         color = MaterialTheme.colorScheme.surfaceVariant
                     ) {
                         Text(
@@ -972,7 +1168,7 @@ private fun AdminAdmissionCard(
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                         )
                     }
                 }
@@ -980,23 +1176,23 @@ private fun AdminAdmissionCard(
 
             // APPROVED State: Assigned Bed / Room Banner
             if (admission.status == AdmissionStatus.APPROVED && !admission.assignedRoom.isNullOrBlank()) {
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
                 Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             imageVector = Icons.Default.MeetingRoom,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.secondary,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(18.dp)
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = "Assigned Bed / Room: ${admission.assignedRoom}",
                             style = MaterialTheme.typography.bodySmall,
@@ -1009,23 +1205,23 @@ private fun AdminAdmissionCard(
 
             // REJECTED State: Rejection Remark Banner
             if (admission.status == AdmissionStatus.REJECTED && !admission.adminRemark.isNullOrBlank()) {
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
                 Surface(
-                    shape = RoundedCornerShape(6.dp),
+                    shape = RoundedCornerShape(10.dp),
                     color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             imageVector = Icons.Default.ErrorOutline,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(18.dp)
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = "Rejection Remark: ${admission.adminRemark}",
                             style = MaterialTheme.typography.bodySmall,
@@ -1038,23 +1234,23 @@ private fun AdminAdmissionCard(
 
             // DISCHARGED State: Discharge Banner
             if (admission.status == AdmissionStatus.DISCHARGED) {
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
                 Surface(
-                    shape = RoundedCornerShape(6.dp),
+                    shape = RoundedCornerShape(10.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             imageVector = Icons.Default.CheckCircle,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(18.dp)
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = "Patient Discharged${if (!admission.assignedRoom.isNullOrBlank()) " • Concluded Room: ${admission.assignedRoom}" else ""}",
                             style = MaterialTheme.typography.bodySmall,
@@ -1062,35 +1258,6 @@ private fun AdminAdmissionCard(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Footer: Reference Code & Review Request Navigation
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Ref: ${admission.referenceCode()}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "Review Request",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(14.dp)
-                    )
                 }
             }
         }
@@ -1103,64 +1270,103 @@ private fun AdminAppointmentCard(
     doctorLookup: (String) -> Doctor?
 ) {
     val doctor = booking.doctorId?.let { doctorLookup(it) }
-    val statusColor = when (booking.status) {
-        BookingStatus.CONFIRMED -> Color(0xFFD1E7DD)
-        BookingStatus.COMPLETED -> Color(0xFFE2E3E5)
-        BookingStatus.CANCELLED -> Color(0xFFF8D7DA)
-    }
+    val statusContainer = bookingStatusContainerColor(booking.status)
 
     OutlinedCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp)
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.outlinedCardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "Dr. ${doctor?.name ?: "Doctor"}",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                LabelChip(
+                    text = "TOKEN: ${booking.referenceCode()}",
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 )
                 StatusChip(
                     text = booking.status.label,
-                    containerColor = statusColor
+                    containerColor = statusContainer
                 )
             }
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Text(
+                text = "Dr. ${doctor?.name ?: "Doctor"}",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            if (doctor != null) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = doctor.specialty,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
 
             Text(
                 text = "Patient: ${booking.patientName}",
                 style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "Slot: ${booking.timeSlot}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = "Date: ${DateUtils.format(booking.dateMillis)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Schedule,
+                        contentDescription = null,
+                        modifier = Modifier.size(15.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "${DateUtils.format(booking.dateMillis)} • ${booking.timeSlot}",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                if (booking.doctorNote.isNotBlank()) {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.tertiaryContainer
+                    ) {
+                        Text(
+                            text = "Notes saved ✓",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
             }
 
             if (booking.reason.isNotBlank()) {
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = "Reason: ${booking.reason}",
                     style = MaterialTheme.typography.bodySmall,
@@ -1179,77 +1385,107 @@ private fun AdminLabTestCard(
     labTestLookup: (String) -> LabTest?
 ) {
     val test = booking.labTestId?.let { labTestLookup(it) }
-    val statusColor = when (booking.status) {
-        BookingStatus.CONFIRMED -> Color(0xFFD1E7DD)
-        BookingStatus.COMPLETED -> Color(0xFFE2E3E5)
-        BookingStatus.CANCELLED -> Color(0xFFF8D7DA)
-    }
+    val statusContainer = bookingStatusContainerColor(booking.status)
 
     OutlinedCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp)
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.outlinedCardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = test?.name ?: "Diagnostic Test",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                LabelChip(
+                    text = "TOKEN: ${booking.referenceCode()}",
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 )
                 StatusChip(
                     text = booking.status.label,
-                    containerColor = statusColor
+                    containerColor = statusContainer
                 )
             }
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Text(
+                text = test?.name ?: "Diagnostic Test",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            if (test != null) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "${test.category} • ₹${test.price}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
 
             Text(
                 text = "Patient: ${booking.patientName}",
                 style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "Slot: ${booking.timeSlot}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = "Date: ${DateUtils.format(booking.dateMillis)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Schedule,
+                        contentDescription = null,
+                        modifier = Modifier.size(15.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "${DateUtils.format(booking.dateMillis)} • ${booking.timeSlot}",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
             }
 
             if (booking.status == BookingStatus.CONFIRMED) {
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(12.dp))
                 Button(
                     onClick = onMarkCompleted,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp),
-                    enabled = !isProcessing
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    enabled = !isProcessing,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    )
                 ) {
                     Icon(
                         imageVector = Icons.Default.Check,
                         contentDescription = null,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text(if (isProcessing) "Updating..." else "Mark Completed")
+                    Text(if (isProcessing) "Updating..." else "Mark Completed", fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -1277,15 +1513,59 @@ private fun AdminUnauthenticatedGate(
                 .padding(24.dp),
             contentAlignment = Alignment.Center
         ) {
-            EmptyState(
-                icon = Icons.Default.AccountCircle,
-                message = "Hospital Admin Session Required\n\nPlease sign in with your hospital administrator credentials to manage bed allotments, admissions, and hospital resources.",
-                action = {
-                    Button(onClick = onLoginClick) {
-                        Text("Sign In as Hospital Admin")
+            OutlinedCard(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.outlinedCardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(24.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                        modifier = Modifier.size(72.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.AccountCircle,
+                                contentDescription = null,
+                                modifier = Modifier.size(40.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Hospital Admin Sign-In Required",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Please sign in with your hospital administrator credentials to manage bed allotments, admissions, and hospital resources.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Button(
+                        onClick = onLoginClick,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Text("Sign In as Hospital Admin", fontWeight = FontWeight.SemiBold)
                     }
                 }
-            )
+            }
         }
     }
 }
@@ -1311,15 +1591,62 @@ private fun AdminUnauthorizedGate(
                 .padding(24.dp),
             contentAlignment = Alignment.Center
         ) {
-            EmptyState(
-                icon = Icons.Default.Block,
-                message = "Access Restricted\n\nThis management console is restricted exclusively to authorized Hospital Administrators. Your active session does not have administrative privileges for this hospital.",
-                action = {
-                    Button(onClick = onSwitchAccountClick) {
-                        Text("Switch Account / Logout")
+            OutlinedCard(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.outlinedCardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(24.dp),
+                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+                        modifier = Modifier.size(72.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.Block,
+                                contentDescription = null,
+                                modifier = Modifier.size(40.dp),
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Access Restricted",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "This management console is restricted exclusively to authorized Hospital Administrators. Your active session does not have administrative privileges for this hospital.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Button(
+                        onClick = onSwitchAccountClick,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary
+                        )
+                    ) {
+                        Text("Switch Account / Logout", fontWeight = FontWeight.SemiBold)
                     }
                 }
-            )
+            }
         }
     }
 }
