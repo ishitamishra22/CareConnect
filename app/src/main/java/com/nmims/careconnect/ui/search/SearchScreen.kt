@@ -87,11 +87,13 @@ import com.nmims.careconnect.data.model.SortOption
 import com.nmims.careconnect.data.model.Specialties
 import com.nmims.careconnect.data.repository.HospitalRepository
 import com.nmims.careconnect.ui.common.CareTopBar
-import com.nmims.careconnect.ui.common.EmptyState
 import com.nmims.careconnect.ui.common.InitialsAvatar
 import com.nmims.careconnect.ui.common.LabelChip
 import com.nmims.careconnect.ui.common.PrimaryButton
 import com.nmims.careconnect.ui.common.RatingBar
+import com.nmims.careconnect.ui.patient.components.EmptyStatePanel
+import com.nmims.careconnect.ui.search.components.DoctorListingCard
+import com.nmims.careconnect.ui.search.components.HospitalListingCard
 import com.nmims.careconnect.ui.theme.CareConnectTheme
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -345,9 +347,10 @@ fun SearchScreen(
             // Results List
             if (selectedTab == 0) {
                 if (doctorResults.isEmpty()) {
-                    EmptyState(
+                    EmptyStatePanel(
                         icon = Icons.Default.SearchOff,
-                        message = "No doctors found matching your criteria.\nTry searching another specialty or keyword."
+                        title = "No Doctors Found",
+                        message = "No doctors matched your search criteria. Try modifying your search term or selecting 'All' specialties."
                     )
                 } else {
                     LazyColumn(
@@ -359,12 +362,11 @@ fun SearchScreen(
                             val hospital = HospitalRepository.getHospital(doctor.hospitalId)
                             val isChecked = selectedDoctorIds.contains(doctor.id)
 
-                            DoctorCard(
+                            DoctorListingCard(
                                 doctor = doctor,
-                                hospital = hospital,
-                                isChecked = isChecked,
-                                showCompareCheckbox = true,
-                                onCardClick = { onDoctorClick(doctor.id) },
+                                hospitalName = hospital?.let { "${it.name} • ${it.area}" },
+                                accentColorHex = hospital?.accentColorHex,
+                                isSelectedForCompare = isChecked,
                                 onCompareToggle = {
                                     if (isChecked) {
                                         selectedDoctorIds.remove(doctor.id)
@@ -379,16 +381,18 @@ fun SearchScreen(
                                             ).show()
                                         }
                                     }
-                                }
+                                },
+                                onClick = { onDoctorClick(doctor.id) }
                             )
                         }
                     }
                 }
             } else {
                 if (hospitalResults.isEmpty()) {
-                    EmptyState(
+                    EmptyStatePanel(
                         icon = Icons.Default.LocalHospital,
-                        message = "No hospitals found matching your criteria.\nTry searching another area or specialty."
+                        title = "No Hospitals Found",
+                        message = "No partner hospitals matched your criteria. Try searching by city, specialty, or hospital facility."
                     )
                 } else {
                     LazyColumn(
@@ -397,9 +401,9 @@ fun SearchScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         items(hospitalResults, key = { it.id }) { hospital ->
-                            HospitalCard(
+                            HospitalListingCard(
                                 hospital = hospital,
-                                onCardClick = { onHospitalClick(hospital.id) }
+                                onClick = { onHospitalClick(hospital.id) }
                             )
                         }
                     }
@@ -410,8 +414,7 @@ fun SearchScreen(
 }
 
 /**
- * Reusable DoctorCard with initials avatar, specialty, hospital name, rating,
- * fee, experience and an optional Compare checkbox.
+ * Backward compatibility aliases for DoctorCard & HospitalCard
  */
 @Composable
 fun DoctorCard(
@@ -423,236 +426,28 @@ fun DoctorCard(
     onCardClick: () -> Unit,
     onCompareToggle: (() -> Unit)? = null
 ) {
-    Card(
+    DoctorListingCard(
+        doctor = doctor,
+        hospitalName = hospital?.let { "${it.name} • ${it.area}" },
+        accentColorHex = hospital?.accentColorHex,
+        isSelectedForCompare = isChecked,
+        onCompareToggle = { onCompareToggle?.invoke() },
+        onClick = onCardClick,
         modifier = modifier
-            .fillMaxWidth()
-            .clickable { onCardClick() },
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Top
-            ) {
-                InitialsAvatar(
-                    name = doctor.name,
-                    colorHex = hospital?.accentColorHex ?: "#1F7A8C",
-                    size = 52.dp
-                )
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = doctor.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-
-                    Text(
-                        text = doctor.specialty,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-
-                    Text(
-                        text = "${hospital?.name.orEmpty()} • ${hospital?.area.orEmpty()}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        RatingBar(rating = doctor.rating, size = 14.dp)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "${doctor.rating} (${doctor.reviewCount})",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                if (showCompareCheckbox && onCompareToggle != null) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.clickable { onCompareToggle() }
-                    ) {
-                        Checkbox(
-                            checked = isChecked,
-                            onCheckedChange = { onCompareToggle() },
-                            colors = CheckboxDefaults.colors(
-                                checkedColor = MaterialTheme.colorScheme.primary
-                            )
-                        )
-                        Text(
-                            text = "Compare",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (isChecked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "${doctor.experienceYears} yrs experience",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    Text(
-                        text = "₹${doctor.consultationFee} fee",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
-        }
-    }
+    )
 }
 
-/**
- * Reusable HospitalCard with rating, location, specialty preview, and 24x7 emergency badge.
- */
 @Composable
 fun HospitalCard(
     hospital: Hospital,
     modifier: Modifier = Modifier,
     onCardClick: () -> Unit
 ) {
-    Card(
+    HospitalListingCard(
+        hospital = hospital,
+        onClick = onCardClick,
         modifier = modifier
-            .fillMaxWidth()
-            .clickable { onCardClick() },
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = hospital.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-
-                    Text(
-                        text = "${hospital.area}, ${hospital.city}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                if (hospital.emergency24x7) {
-                    LabelChip(
-                        text = "24x7 Emergency",
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                        contentColor = MaterialTheme.colorScheme.onErrorContainer
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                RatingBar(rating = hospital.rating, size = 15.dp)
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = "${hospital.rating} (${hospital.reviewCount} reviews)",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Specialties preview chips
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                hospital.specialties.take(3).forEach { specialty ->
-                    LabelChip(
-                        text = specialty,
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
-                }
-                if (hospital.specialties.size > 3) {
-                    LabelChip(
-                        text = "+${hospital.specialties.size - 3} more",
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            val minRoomPrice = hospital.roomTypes.minOfOrNull { it.pricePerDay } ?: 0
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Rooms from ₹$minRoomPrice/day",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "View Details",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.width(2.dp))
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-            }
-        }
-    }
+    )
 }
 
 @Preview(showBackground = true)
