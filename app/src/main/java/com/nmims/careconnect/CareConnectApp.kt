@@ -323,6 +323,9 @@ fun CareConnectApp(
                 onNavigateBack = { navController.back() },
                 onAdmissionClick = { admissionId ->
                     navController.navigate(Screen.AdmissionDetail(admissionId))
+                },
+                onRequestAdmission = {
+                    navController.navigate(Screen.AdmissionForm())
                 }
             )
         }

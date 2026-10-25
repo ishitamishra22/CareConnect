@@ -34,6 +34,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Hotel
@@ -43,6 +44,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
@@ -74,6 +76,7 @@ import com.nmims.careconnect.ui.common.CareTopBar
 import com.nmims.careconnect.ui.common.DateUtils
 import com.nmims.careconnect.ui.common.EmptyState
 import com.nmims.careconnect.ui.common.LoadingIndicator
+import com.nmims.careconnect.ui.common.PrimaryButton
 import com.nmims.careconnect.ui.common.StatusChip
 import com.nmims.careconnect.ui.theme.CareConnectTheme
 import kotlinx.coroutines.flow.catch
@@ -81,7 +84,8 @@ import kotlinx.coroutines.flow.catch
 @Composable
 fun MyAdmissionsScreen(
     onNavigateBack: () -> Unit,
-    onAdmissionClick: (String) -> Unit
+    onAdmissionClick: (String) -> Unit,
+    onRequestAdmission: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val repository = remember(context) { AdmissionRepositoryProvider.get(context) }
@@ -148,6 +152,11 @@ fun MyAdmissionsScreen(
         onRetry = { retryTrigger++ },
         onNavigateBack = onNavigateBack,
         onAdmissionClick = onAdmissionClick,
+        onRequestAdmission = {
+            if (!isUnauthenticated) {
+                onRequestAdmission()
+            }
+        },
         hospitalLookup = { hospitalId -> HospitalRepository.getHospital(hospitalId) }
     )
 }
@@ -164,6 +173,7 @@ fun MyAdmissionsContent(
     onRetry: () -> Unit,
     onNavigateBack: () -> Unit,
     onAdmissionClick: (String) -> Unit,
+    onRequestAdmission: () -> Unit = {},
     hospitalLookup: (String) -> Hospital? = { HospitalRepository.getHospital(it) },
     modifier: Modifier = Modifier
 ) {
@@ -171,7 +181,17 @@ fun MyAdmissionsContent(
         topBar = {
             CareTopBar(
                 title = "My Admissions",
-                onBack = onNavigateBack
+                onBack = onNavigateBack,
+                actions = {
+                    if (!isUnauthenticated) {
+                        IconButton(onClick = onRequestAdmission) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "Request Inpatient Admission"
+                            )
+                        }
+                    }
+                }
             )
         },
         modifier = modifier
@@ -225,7 +245,12 @@ fun MyAdmissionsContent(
                         ) {
                             EmptyState(
                                 icon = Icons.Default.AccountCircle,
-                                message = "Patient Sign-In Required\n\nPlease sign in with a patient account to view and track your hospital admission requests."
+                                message = "Patient Sign-In Required\n\nPlease sign in with a patient account to view and track your hospital admission requests.",
+                                action = {
+                                    Button(onClick = onNavigateBack) {
+                                        Text("Go Back")
+                                    }
+                                }
                             )
                         }
                     }
@@ -270,7 +295,13 @@ fun MyAdmissionsContent(
                         ) {
                             EmptyState(
                                 icon = Icons.Default.Hotel,
-                                message = "No active admissions found.\n\nYou have no pending requests or active inpatient hospital stays at this time."
+                                message = "No active admissions found.\n\nYou have no pending requests or active inpatient hospital stays at this time.",
+                                action = {
+                                    PrimaryButton(
+                                        text = "Request Inpatient Admission",
+                                        onClick = onRequestAdmission
+                                    )
+                                }
                             )
                         }
                     }
@@ -649,6 +680,7 @@ fun MyAdmissionsScreenActivePreview() {
             onRetry = {},
             onNavigateBack = {},
             onAdmissionClick = {},
+            onRequestAdmission = {},
             hospitalLookup = { previewMockHospital }
         )
     }
@@ -669,6 +701,7 @@ fun MyAdmissionsScreenPastPreview() {
             onRetry = {},
             onNavigateBack = {},
             onAdmissionClick = {},
+            onRequestAdmission = {},
             hospitalLookup = { previewMockHospital }
         )
     }
@@ -689,6 +722,7 @@ fun MyAdmissionsScreenEmptyPreview() {
             onRetry = {},
             onNavigateBack = {},
             onAdmissionClick = {},
+            onRequestAdmission = {},
             hospitalLookup = { previewMockHospital }
         )
     }
@@ -709,6 +743,7 @@ fun MyAdmissionsScreenUnauthenticatedPreview() {
             onRetry = {},
             onNavigateBack = {},
             onAdmissionClick = {},
+            onRequestAdmission = {},
             hospitalLookup = { previewMockHospital }
         )
     }
