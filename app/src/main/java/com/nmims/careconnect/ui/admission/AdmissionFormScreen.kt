@@ -5,12 +5,14 @@ package com.nmims.careconnect.ui.admission
  * Four-step wizard for automated hospital admission requests:
  * 1. Hospital & Reason: Partner hospital dropdown selection, reason for admission (min 10 chars), optional referring doctor.
  * 2. Patient Details: Demographics, emergency contact, and clinical history auto-filled from Medical Portfolio.
- * 3. Room & Dates: Room category and stay duration (placeholder for Milestone 9).
+ * 3. Room & Dates: Room category selection, preferred admission date picker, stay duration, and live cost calculation.
  * 4. Insurance & Review: Insurance details and final request review (placeholder for Milestone 10).
  */
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,19 +44,26 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -75,9 +84,11 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.nmims.careconnect.data.model.RoomType
 import com.nmims.careconnect.data.repository.HospitalRepository
 import com.nmims.careconnect.data.repository.PortfolioRepositoryProvider
 import com.nmims.careconnect.ui.common.CareTopBar
+import com.nmims.careconnect.ui.common.DateUtils
 import com.nmims.careconnect.ui.common.SectionCard
 import com.nmims.careconnect.ui.theme.CareConnectTheme
 
@@ -267,6 +278,53 @@ fun AdmissionFormScreen(
         else -> null
     }
 
+    // Step 3: Room & Dates Form State
+    val todayStartMillis = remember { DateUtils.todayStartMillis() }
+    var selectedRoomTypeName by rememberSaveable { mutableStateOf("") }
+    var preferredDateMillis by rememberSaveable { mutableStateOf<Long?>(null) }
+    var expectedStayDaysText by rememberSaveable { mutableStateOf("") }
+    var showDatePickerDialog by rememberSaveable { mutableStateOf(false) }
+    var step3Touched by rememberSaveable { mutableStateOf(false) }
+
+    val availableRoomTypes = selectedHospital?.roomTypes ?: emptyList()
+    val selectedRoomType = availableRoomTypes.firstOrNull { it.name == selectedRoomTypeName }
+
+    // Clear room selection if hospital changes and selected room is not available in new hospital
+    LaunchedEffect(selectedHospitalId) {
+        if (selectedRoomTypeName.isNotBlank() && availableRoomTypes.none { it.name == selectedRoomTypeName }) {
+            selectedRoomTypeName = ""
+        }
+    }
+
+    // Step 3 Validation Logic
+    val isRoomTypeValid = selectedRoomType != null
+    val isDateValid = preferredDateMillis != null && preferredDateMillis!! >= todayStartMillis
+    val stayDaysInt = expectedStayDaysText.toIntOrNull()
+    val isStayDaysValid = stayDaysInt != null && stayDaysInt in 1..365
+    val isStep3Valid = isRoomTypeValid && isDateValid && isStayDaysValid
+
+    val roomTypeError: String? = if (step3Touched && !isRoomTypeValid) {
+        "Please select a room category."
+    } else null
+
+    val preferredDateError: String? = when {
+        step3Touched && preferredDateMillis == null -> "Please select a preferred admission date."
+        preferredDateMillis != null && preferredDateMillis!! < todayStartMillis -> "Admission date cannot be in the past."
+        else -> null
+    }
+
+    val stayDaysError: String? = when {
+        expectedStayDaysText.isNotBlank() && !isStayDaysValid -> "Stay duration must be between 1 and 365 days."
+        step3Touched && expectedStayDaysText.isBlank() -> "Expected stay duration is required (1 to 365 days)."
+        else -> null
+    }
+
+    // Live estimated cost calculation guarded against arithmetic overflow
+    val pricePerDay = selectedRoomType?.pricePerDay ?: 0
+    val stayDays = stayDaysInt ?: 0
+    val estimatedCostLong = pricePerDay.toLong() * stayDays.toLong()
+    val estimatedCostInt = if (estimatedCostLong > Int.MAX_VALUE) Int.MAX_VALUE else estimatedCostLong.toInt()
+
     // Custom back handler for multi-step wizard navigation
     BackHandler(enabled = true) {
         if (currentStep > 1) {
@@ -281,7 +339,7 @@ fun AdmissionFormScreen(
         return when (step) {
             1 -> isStep1Valid
             2 -> isStep2Valid
-            3 -> true // Validated in Milestone 9
+            3 -> isStep3Valid
             4 -> true // Validated in Milestone 10
             else -> false
         }
@@ -321,6 +379,42 @@ fun AdmissionFormScreen(
                 }
             }
         )
+    }
+
+    // Material 3 Date Picker Dialog for Step 3
+    if (showDatePickerDialog) {
+        val datePickerState = rememberDatePickerState(
+            selectableDates = object : SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean {
+                    return DateUtils.normalizeToDayStart(utcTimeMillis) >= DateUtils.todayStartMillis()
+                }
+            }
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDatePickerDialog = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        datePickerState.selectedDateMillis?.let { utcMillis ->
+                            val localMidnight = DateUtils.normalizeToDayStart(utcMillis)
+                            if (localMidnight >= DateUtils.todayStartMillis()) {
+                                preferredDateMillis = localMidnight
+                            }
+                        }
+                        showDatePickerDialog = false
+                    }
+                ) {
+                    Text("OK", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePickerDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
     }
 
     Scaffold(
@@ -372,6 +466,8 @@ fun AdmissionFormScreen(
                                 step1Touched = true
                             } else if (currentStep == 2) {
                                 step2Touched = true
+                            } else if (currentStep == 3) {
+                                step3Touched = true
                             }
                             if (currentStep < 4) {
                                 if (validateCurrentStep(currentStep)) {
@@ -940,12 +1036,280 @@ fun AdmissionFormScreen(
                             }
                         }
                     }
-                    3 -> StepPlaceholderCard(
-                        stepNumber = 3,
-                        title = "Room & Dates",
-                        description = "Choose room category, preferred admission date, expected stay duration, and live cost calculation.",
-                        icon = Icons.Default.CalendarMonth
-                    )
+                    3 -> {
+                        // STEP 3: Room & Dates
+                        SectionCard(title = "Room Category") {
+                            Text(
+                                text = "Choose an accommodation category offered by ${selectedHospital?.name ?: "the hospital"}:",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            if (availableRoomTypes.isEmpty()) {
+                                Text(
+                                    text = "No room categories available for this hospital.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            } else {
+                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    availableRoomTypes.forEach { room ->
+                                        val isSelected = selectedRoomTypeName == room.name
+                                        Card(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    selectedRoomTypeName = room.name
+                                                    step3Touched = true
+                                                },
+                                            shape = RoundedCornerShape(12.dp),
+                                            border = BorderStroke(
+                                                width = if (isSelected) 2.dp else 1.dp,
+                                                color = if (isSelected) MaterialTheme.colorScheme.primary
+                                                else MaterialTheme.colorScheme.outlineVariant
+                                            ),
+                                            colors = CardDefaults.cardColors(
+                                                containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)
+                                                else MaterialTheme.colorScheme.surface
+                                            )
+                                        ) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(14.dp),
+                                                verticalAlignment = Alignment.Top
+                                            ) {
+                                                RadioButton(
+                                                    selected = isSelected,
+                                                    onClick = {
+                                                        selectedRoomTypeName = room.name
+                                                        step3Touched = true
+                                                    },
+                                                    modifier = Modifier.padding(top = 2.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(10.dp))
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        Text(
+                                                            text = room.name,
+                                                            style = MaterialTheme.typography.titleMedium,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                                        )
+                                                        Text(
+                                                            text = "₹${room.pricePerDay} / day",
+                                                            style = MaterialTheme.typography.titleSmall,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = MaterialTheme.colorScheme.primary
+                                                        )
+                                                    }
+                                                    if (room.description.isNotBlank()) {
+                                                        Spacer(modifier = Modifier.height(4.dp))
+                                                        Text(
+                                                            text = room.description,
+                                                            style = MaterialTheme.typography.bodySmall,
+                                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (roomTypeError != null) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = roomTypeError,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.padding(start = 4.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        SectionCard(title = "Preferred Admission Date") {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        step3Touched = true
+                                        showDatePickerDialog = true
+                                    }
+                            ) {
+                                OutlinedTextField(
+                                    value = preferredDateMillis?.let { DateUtils.formatWithDay(it) } ?: "",
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    enabled = false,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    label = { Text("Admission Date *") },
+                                    placeholder = { Text("Select preferred admission date") },
+                                    trailingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Default.CalendarMonth,
+                                            contentDescription = "Pick admission date",
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    },
+                                    isError = preferredDateError != null,
+                                    supportingText = if (preferredDateError != null) {
+                                        { Text(preferredDateError, color = MaterialTheme.colorScheme.error) }
+                                    } else {
+                                        { Text("Select today or a future date") }
+                                    },
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                                        disabledBorderColor = if (preferredDateError != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline,
+                                        disabledLabelColor = if (preferredDateError != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        disabledPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                        disabledTrailingIconColor = MaterialTheme.colorScheme.primary,
+                                        disabledSupportingTextColor = if (preferredDateError != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        SectionCard(title = "Stay Duration & Cost Estimation") {
+                            OutlinedTextField(
+                                value = expectedStayDaysText,
+                                onValueChange = { input ->
+                                    step3Touched = true
+                                    if (input.length <= 3 && input.all { it.isDigit() }) {
+                                        expectedStayDaysText = input
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                label = { Text("Expected Stay (Days) *") },
+                                placeholder = { Text("e.g. 3") },
+                                isError = stayDaysError != null,
+                                supportingText = if (stayDaysError != null) {
+                                    { Text(stayDaysError, color = MaterialTheme.colorScheme.error) }
+                                } else {
+                                    { Text("Enter 1 to 365 days") }
+                                },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                                )
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = "Estimated Cost Breakdown",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+
+                                    HorizontalDivider(
+                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                                        modifier = Modifier.padding(vertical = 4.dp)
+                                    )
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            text = "Room Category",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Text(
+                                            text = selectedRoomType?.name ?: "None selected",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Medium,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            text = "Daily Room Rate",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Text(
+                                            text = if (selectedRoomType != null) "₹${selectedRoomType.pricePerDay} / day" else "₹0 / day",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Medium,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            text = "Stay Duration",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Text(
+                                            text = if (isStayDaysValid) "$stayDays ${if (stayDays == 1) "day" else "days"}" else "—",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Medium,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+
+                                    HorizontalDivider(
+                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                                        modifier = Modifier.padding(vertical = 4.dp)
+                                    )
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "Estimated Total Cost",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = if (selectedRoomType != null && isStayDaysValid) "₹$estimatedCostInt" else "₹0",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                     4 -> StepPlaceholderCard(
                         stepNumber = 4,
                         title = "Insurance & Review",
