@@ -6,7 +6,7 @@ package com.nmims.careconnect.ui.admission
  * 1. Hospital & Reason: Partner hospital dropdown selection, reason for admission (min 10 chars), optional referring doctor.
  * 2. Patient Details: Demographics, emergency contact, and clinical history auto-filled from Medical Portfolio.
  * 3. Room & Dates: Room category selection, preferred admission date picker, stay duration, and live cost calculation.
- * 4. Insurance & Review: Insurance details and final request review (placeholder for Milestone 10).
+ * 4. Insurance & Review: Optional health insurance details with self-pay opt-out, policy validity date picker, and comprehensive final admission review.
  */
 
 import androidx.activity.compose.BackHandler
@@ -16,6 +16,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -34,6 +35,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.MedicalServices
@@ -43,6 +46,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -84,6 +88,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.nmims.careconnect.data.model.InsuranceDetails
 import com.nmims.careconnect.data.model.RoomType
 import com.nmims.careconnect.data.repository.HospitalRepository
 import com.nmims.careconnect.data.repository.PortfolioRepositoryProvider
@@ -325,6 +330,85 @@ fun AdmissionFormScreen(
     val estimatedCostLong = pricePerDay.toLong() * stayDays.toLong()
     val estimatedCostInt = if (estimatedCostLong > Int.MAX_VALUE) Int.MAX_VALUE else estimatedCostLong.toInt()
 
+    // Step 4: Insurance & Review Form State
+    var noInsurance by rememberSaveable { mutableStateOf(false) }
+    var insuranceProvider by rememberSaveable { mutableStateOf("") }
+    var policyNumber by rememberSaveable { mutableStateOf("") }
+    var policyHolderName by rememberSaveable { mutableStateOf("") }
+    var insuranceValidTillMillis by rememberSaveable { mutableStateOf<Long?>(null) }
+    var sumInsuredText by rememberSaveable { mutableStateOf("") }
+    var showInsuranceDatePickerDialog by rememberSaveable { mutableStateOf(false) }
+    var step4Touched by rememberSaveable { mutableStateOf(false) }
+    var showReviewReadyDialog by rememberSaveable { mutableStateOf(false) }
+
+    // Pre-fill policyholder name with patient name when entering Step 4 if not yet set
+    LaunchedEffect(currentStep, patientName) {
+        if (currentStep == 4 && policyHolderName.isBlank() && patientName.isNotBlank() && !noInsurance) {
+            policyHolderName = patientName.trim()
+        }
+    }
+
+    // Step 4 Validation Logic
+    val trimmedProvider = insuranceProvider.trim()
+    val isProviderValid = noInsurance || trimmedProvider.length >= 2
+
+    val trimmedPolicyNumber = policyNumber.trim()
+    val isPolicyNumberValid = noInsurance || trimmedPolicyNumber.length >= 3
+
+    val trimmedPolicyHolder = policyHolderName.trim()
+    val isPolicyHolderValid = noInsurance || (trimmedPolicyHolder.length >= 3 && trimmedPolicyHolder.all { it.isLetter() || it.isWhitespace() })
+
+    val isInsuranceDateValid = noInsurance || (insuranceValidTillMillis != null && insuranceValidTillMillis!! >= todayStartMillis)
+
+    val sumInsuredInt = sumInsuredText.toIntOrNull()
+    val isSumInsuredValid = noInsurance || (sumInsuredInt != null && sumInsuredInt > 0)
+
+    val isInsuranceValid = if (noInsurance) {
+        true
+    } else {
+        isProviderValid && isPolicyNumberValid && isPolicyHolderValid && isInsuranceDateValid && isSumInsuredValid
+    }
+
+    val isStep4Valid = isStep1Valid && isStep2Valid && isStep3Valid && isInsuranceValid
+
+    val providerError: String? = when {
+        noInsurance -> null
+        insuranceProvider.isNotBlank() && !isProviderValid -> "Provider name must be at least 2 characters."
+        step4Touched && trimmedProvider.isEmpty() -> "Insurance provider is required."
+        else -> null
+    }
+
+    val policyNumberError: String? = when {
+        noInsurance -> null
+        policyNumber.isNotBlank() && !isPolicyNumberValid -> "Policy number must be at least 3 characters."
+        step4Touched && trimmedPolicyNumber.isEmpty() -> "Policy number is required."
+        else -> null
+    }
+
+    val policyHolderError: String? = when {
+        noInsurance -> null
+        policyHolderName.isNotBlank() && !isPolicyHolderValid -> {
+            if (trimmedPolicyHolder.length < 3) "Min 3 characters required."
+            else "Letters and spaces only."
+        }
+        step4Touched && trimmedPolicyHolder.isEmpty() -> "Policyholder name is required."
+        else -> null
+    }
+
+    val insuranceDateError: String? = when {
+        noInsurance -> null
+        step4Touched && insuranceValidTillMillis == null -> "Policy validity date is required."
+        insuranceValidTillMillis != null && insuranceValidTillMillis!! < todayStartMillis -> "Policy validity date cannot be in the past."
+        else -> null
+    }
+
+    val sumInsuredError: String? = when {
+        noInsurance -> null
+        sumInsuredText.isNotBlank() && !isSumInsuredValid -> "Sum insured must be greater than 0."
+        step4Touched && sumInsuredText.isBlank() -> "Sum insured amount is required."
+        else -> null
+    }
+
     // Custom back handler for multi-step wizard navigation
     BackHandler(enabled = true) {
         if (currentStep > 1) {
@@ -340,7 +424,7 @@ fun AdmissionFormScreen(
             1 -> isStep1Valid
             2 -> isStep2Valid
             3 -> isStep3Valid
-            4 -> true // Validated in Milestone 10
+            4 -> isStep4Valid
             else -> false
         }
     }
@@ -417,6 +501,76 @@ fun AdmissionFormScreen(
         }
     }
 
+    // Material 3 Date Picker Dialog for Policy Validity
+    if (showInsuranceDatePickerDialog) {
+        val insDatePickerState = rememberDatePickerState(
+            selectableDates = object : SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean {
+                    return DateUtils.normalizeToDayStart(utcTimeMillis) >= DateUtils.todayStartMillis()
+                }
+            }
+        )
+        DatePickerDialog(
+            onDismissRequest = { showInsuranceDatePickerDialog = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        insDatePickerState.selectedDateMillis?.let { utcMillis ->
+                            val localMidnight = DateUtils.normalizeToDayStart(utcMillis)
+                            if (localMidnight >= DateUtils.todayStartMillis()) {
+                                insuranceValidTillMillis = localMidnight
+                            }
+                        }
+                        showInsuranceDatePickerDialog = false
+                    }
+                ) {
+                    Text("OK", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showInsuranceDatePickerDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        ) {
+            DatePicker(state = insDatePickerState)
+        }
+    }
+
+    // Step 4 Review Ready Confirmation Dialog (validates form without writing to Firestore or triggering broadcasts)
+    if (showReviewReadyDialog) {
+        AlertDialog(
+            onDismissRequest = { showReviewReadyDialog = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.CheckCircle,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(36.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "Admission Review Complete",
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+            },
+            text = {
+                Text(
+                    text = "All admission details for ${trimmedPatientName.ifBlank { "the patient" }} at ${selectedHospital?.name ?: "the hospital"} have been verified and are ready for submission.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center
+                )
+            },
+            confirmButton = {
+                Button(onClick = { showReviewReadyDialog = false }) {
+                    Text("OK")
+                }
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             CareTopBar(
@@ -468,13 +622,18 @@ fun AdmissionFormScreen(
                                 step2Touched = true
                             } else if (currentStep == 3) {
                                 step3Touched = true
+                            } else if (currentStep == 4) {
+                                step4Touched = true
                             }
                             if (currentStep < 4) {
                                 if (validateCurrentStep(currentStep)) {
                                     currentStep += 1
                                 }
                             } else {
-                                // Final submission trigger (wired in later milestone)
+                                step4Touched = true
+                                if (validateCurrentStep(4)) {
+                                    showReviewReadyDialog = true
+                                }
                             }
                         },
                         modifier = Modifier.weight(1f),
@@ -1310,12 +1469,296 @@ fun AdmissionFormScreen(
                             }
                         }
                     }
-                    4 -> StepPlaceholderCard(
-                        stepNumber = 4,
-                        title = "Insurance & Review",
-                        description = "Provide health insurance coverage details and complete the final admission request review.",
-                        icon = Icons.Default.Shield
-                    )
+                    4 -> {
+                        // STEP 4: Insurance & Review
+                        // 1. Insurance Section
+                        SectionCard(title = "Health Insurance (Optional)") {
+                            Text(
+                                text = "Provide medical insurance coverage details to facilitate cashless hospitalization or reimbursement.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            // Self-Pay / No Insurance Toggle Card
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        noInsurance = !noInsurance
+                                        step4Touched = true
+                                    },
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(
+                                    width = 1.dp,
+                                    color = if (noInsurance) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+                                ),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (noInsurance) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f)
+                                    else MaterialTheme.colorScheme.surface
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(14.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Checkbox(
+                                        checked = noInsurance,
+                                        onCheckedChange = {
+                                            noInsurance = it
+                                            step4Touched = true
+                                        }
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "I do not have health insurance",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = if (noInsurance) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = "Proceed as a self-paying patient. No insurance policy details required.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+
+                            if (!noInsurance) {
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                OutlinedTextField(
+                                    value = insuranceProvider,
+                                    onValueChange = {
+                                        insuranceProvider = it
+                                        step4Touched = true
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    label = { Text("Insurance Provider *") },
+                                    placeholder = { Text("e.g. Star Health, HDFC ERGO, Care Insurance") },
+                                    isError = providerError != null,
+                                    supportingText = if (providerError != null) {
+                                        { Text(providerError, color = MaterialTheme.colorScheme.error) }
+                                    } else null,
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(12.dp)
+                                )
+
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                OutlinedTextField(
+                                    value = policyNumber,
+                                    onValueChange = {
+                                        policyNumber = it
+                                        step4Touched = true
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    label = { Text("Policy / TPA Card Number *") },
+                                    placeholder = { Text("e.g. POL-98765432") },
+                                    isError = policyNumberError != null,
+                                    supportingText = if (policyNumberError != null) {
+                                        { Text(policyNumberError, color = MaterialTheme.colorScheme.error) }
+                                    } else null,
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(12.dp)
+                                )
+
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                OutlinedTextField(
+                                    value = policyHolderName,
+                                    onValueChange = {
+                                        policyHolderName = it
+                                        step4Touched = true
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    label = { Text("Policyholder Name *") },
+                                    placeholder = { Text("Full name as per insurance policy") },
+                                    trailingIcon = {
+                                        if (patientName.isNotBlank() && policyHolderName.trim() != patientName.trim()) {
+                                            TextButton(
+                                                onClick = {
+                                                    policyHolderName = patientName.trim()
+                                                    step4Touched = true
+                                                }
+                                            ) {
+                                                Text("Same as patient", style = MaterialTheme.typography.labelSmall)
+                                            }
+                                        }
+                                    },
+                                    isError = policyHolderError != null,
+                                    supportingText = if (policyHolderError != null) {
+                                        { Text(policyHolderError, color = MaterialTheme.colorScheme.error) }
+                                    } else null,
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
+                                    shape = RoundedCornerShape(12.dp)
+                                )
+
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            step4Touched = true
+                                            showInsuranceDatePickerDialog = true
+                                        }
+                                    ) {
+                                    OutlinedTextField(
+                                        value = insuranceValidTillMillis?.let { DateUtils.format(it) } ?: "",
+                                        onValueChange = {},
+                                        readOnly = true,
+                                        enabled = false,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        label = { Text("Policy Valid Till *") },
+                                        placeholder = { Text("Select policy expiration date") },
+                                        trailingIcon = {
+                                            Icon(
+                                                imageVector = Icons.Default.CalendarMonth,
+                                                contentDescription = "Pick validity date",
+                                                tint = MaterialTheme.colorScheme.primary
+                                            )
+                                        },
+                                        isError = insuranceDateError != null,
+                                        supportingText = if (insuranceDateError != null) {
+                                            { Text(insuranceDateError, color = MaterialTheme.colorScheme.error) }
+                                        } else {
+                                            { Text("Must be a currently active policy (future date)") }
+                                        },
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                                            disabledBorderColor = if (insuranceDateError != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline,
+                                            disabledLabelColor = if (insuranceDateError != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            disabledPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                            disabledTrailingIconColor = MaterialTheme.colorScheme.primary,
+                                            disabledSupportingTextColor = if (insuranceDateError != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                OutlinedTextField(
+                                    value = sumInsuredText,
+                                    onValueChange = { input ->
+                                        step4Touched = true
+                                        if (input.length <= 9 && input.all { it.isDigit() }) {
+                                            sumInsuredText = input
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    label = { Text("Sum Insured (INR) *") },
+                                    placeholder = { Text("e.g. 500000") },
+                                    isError = sumInsuredError != null,
+                                    supportingText = if (sumInsuredError != null) {
+                                        { Text(sumInsuredError, color = MaterialTheme.colorScheme.error) }
+                                    } else {
+                                        { Text("Enter total medical cover limit in INR") }
+                                    },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    shape = RoundedCornerShape(12.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(20.dp))
+
+                        // 2. Final Admission Review Section
+                        SectionCard(title = "Final Admission Review") {
+                            Text(
+                                text = "Please verify all details carefully before submitting your inpatient admission request:",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            Spacer(modifier = Modifier.height(14.dp))
+
+                            // Hospital & Reason Review Card
+                            ReviewSubCard(
+                                title = "Hospital & Admission Reason",
+                                icon = Icons.Default.LocalHospital,
+                                onEditClick = { currentStep = 1 }
+                            ) {
+                                ReviewDetailRow("Partner Hospital", selectedHospital?.name ?: "—")
+                                ReviewDetailRow("Location", "${selectedHospital?.area ?: ""}, ${selectedHospital?.city ?: "Mumbai"}")
+                                ReviewDetailRow("Reason for Admission", reason.trim())
+                                if (referringDoctor.isNotBlank()) {
+                                    ReviewDetailRow("Referring Doctor", referringDoctor.trim())
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            // Patient Information Review Card
+                            ReviewSubCard(
+                                title = "Patient Details",
+                                icon = Icons.Default.Person,
+                                onEditClick = { currentStep = 2 }
+                            ) {
+                                ReviewDetailRow("Full Name", trimmedPatientName)
+                                ReviewDetailRow("Age & Gender", "${patientAgeInt ?: 0} yrs • $gender")
+                                ReviewDetailRow("Blood Group", bloodGroup)
+                                ReviewDetailRow("Phone", trimmedPhone)
+                                ReviewDetailRow("Residential Address", trimmedAddress)
+                                ReviewDetailRow("Emergency Contact", "$trimmedEmergName ($trimmedEmergPhone)")
+                                if (allergiesText.isNotBlank()) {
+                                    ReviewDetailRow("Allergies", allergiesText.trim())
+                                }
+                                if (chronicConditionsText.isNotBlank()) {
+                                    ReviewDetailRow("Chronic Conditions", chronicConditionsText.trim())
+                                }
+                                if (medicationsText.isNotBlank()) {
+                                    ReviewDetailRow("Current Medications", medicationsText.trim())
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            // Room & Dates Review Card
+                            ReviewSubCard(
+                                title = "Room Category & Stay",
+                                icon = Icons.Default.CalendarMonth,
+                                onEditClick = { currentStep = 3 }
+                            ) {
+                                ReviewDetailRow("Room Category", selectedRoomType?.name ?: selectedRoomTypeName.ifBlank { "—" })
+                                ReviewDetailRow("Daily Rate", if (selectedRoomType != null) "₹${selectedRoomType.pricePerDay} / day" else "—")
+                                ReviewDetailRow("Preferred Date", preferredDateMillis?.let { DateUtils.formatWithDay(it) } ?: "—")
+                                ReviewDetailRow("Expected Stay", if (isStayDaysValid) "$stayDays ${if (stayDays == 1) "day" else "days"}" else "—")
+                                ReviewDetailRow("Estimated Cost", "₹$estimatedCostInt", isHighlighted = true)
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            // Insurance Coverage Review Card
+                            ReviewSubCard(
+                                title = "Insurance Coverage",
+                                icon = Icons.Default.Shield,
+                                onEditClick = null
+                            ) {
+                                if (noInsurance) {
+                                    ReviewDetailRow("Status", "Self-Paying Patient")
+                                    ReviewDetailRow("Coverage Details", "No health insurance provided")
+                                } else if (isInsuranceValid && trimmedProvider.isNotBlank()) {
+                                    ReviewDetailRow("Provider", trimmedProvider)
+                                    ReviewDetailRow("Policy Number", trimmedPolicyNumber)
+                                    ReviewDetailRow("Policyholder", trimmedPolicyHolder)
+                                    ReviewDetailRow("Valid Till", insuranceValidTillMillis?.let { DateUtils.format(it) } ?: "—")
+                                    ReviewDetailRow("Sum Insured", "₹${sumInsuredInt ?: 0}")
+                                } else {
+                                    ReviewDetailRow("Status", "Incomplete insurance details")
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1460,6 +1903,107 @@ private fun StepPlaceholderCard(
                 textAlign = TextAlign.Center
             )
         }
+    }
+}
+
+@Composable
+private fun ReviewSubCard(
+    title: String,
+    icon: ImageVector,
+    onEditClick: (() -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                if (onEditClick != null) {
+                    TextButton(
+                        onClick = onEditClick,
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Edit $title",
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Edit",
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    }
+                }
+            }
+
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                modifier = Modifier.padding(vertical = 8.dp)
+            )
+
+            content()
+        }
+    }
+}
+
+@Composable
+private fun ReviewDetailRow(
+    label: String,
+    value: String,
+    isHighlighted: Boolean = false
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 3.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Top
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1.1f)
+        )
+        Text(
+            text = value,
+            style = if (isHighlighted) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodySmall,
+            fontWeight = if (isHighlighted) FontWeight.Bold else FontWeight.Medium,
+            color = if (isHighlighted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+            textAlign = TextAlign.End,
+            modifier = Modifier.weight(1.7f)
+        )
     }
 }
 
