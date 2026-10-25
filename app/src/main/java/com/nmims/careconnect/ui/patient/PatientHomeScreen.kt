@@ -2,26 +2,23 @@ package com.nmims.careconnect.ui.patient
 
 /*
  * PatientHomeScreen:
- * Patient dashboard containing:
- * - TopBar with "CareConnect" brand title and a Logout icon (with ConfirmDialog -> AppSession.logout() -> resetTo(RoleSelection))
- * - Greeting: "Hello, <name>"
- * - Real-time observation of patient's inpatient hospital admission requests via AdmissionRepository.observeForPatient()
- * - Active Inpatient Admission Status Card:
- *   - Displayed when an active admission (PENDING or APPROVED) exists
- *   - Shows resolved hospital name (with "Partner Hospital" safe fallback), semantic status chip, preferred date, stay duration
- *   - Highlights assigned room/bed allotment (admission.assignedRoom) when approved
- *   - Tap action opens My Admissions
- * - Non-blocking stream failure handling with a compact Retry banner, preserving previous valid data
- * - Six fully-integrated feature cards:
- *   1. My Medical Portfolio (wired to Screen.Portfolio)
- *   2. Find Hospitals & Doctors (wired to Screen.Search)
- *   3. Book Appointment / Lab Test (wired to Screen.BookingHub)
- *   4. My Bookings (wired to Screen.MyBookings)
- *   5. Hospital Admission (wired to Screen.AdmissionForm)
- *   6. My Admissions (dynamically reflects active admissions count)
- * - Extracted stateless PatientHomeContent and Firebase-independent Compose Previews
+ * Redesigned Patient Home Dashboard:
+ * - Personalized welcome header with InitialsAvatar
+ * - Clinical health-focused hero card with fast summary
+ * - Modern 2x2 quick action grid (Portfolio, Search/Doctors, Book Consultation, My Bookings)
+ * - Hospital Admission & Inpatient Tracking shortcuts
+ * - Live Inpatient Admission Status Card with room allotment banner
+ * - Real-time upcoming appointment/lab booking card with fast token preview
+ * - Comprehensive booking history shortcut
+ * - Full backward-compatible parameters and callbacks
  */
 
+import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -35,9 +32,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import android.widget.Toast
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
@@ -46,9 +41,11 @@ import androidx.compose.material.icons.filled.CheckCircleOutline
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.FolderShared
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Hotel
 import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.MeetingRoom
+import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -77,14 +74,26 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.nmims.careconnect.data.model.Admission
 import com.nmims.careconnect.data.model.AdmissionStatus
+import com.nmims.careconnect.data.model.Booking
+import com.nmims.careconnect.data.model.BookingStatus
+import com.nmims.careconnect.data.model.BookingType
+import com.nmims.careconnect.data.model.Doctor
 import com.nmims.careconnect.data.model.Hospital
+import com.nmims.careconnect.data.model.LabTest
 import com.nmims.careconnect.data.repository.AdmissionRepositoryProvider
+import com.nmims.careconnect.data.repository.BookingRepositoryProvider
 import com.nmims.careconnect.data.repository.HospitalRepository
 import com.nmims.careconnect.session.AppSession
 import com.nmims.careconnect.ui.common.CareTopBar
 import com.nmims.careconnect.ui.common.ConfirmDialog
 import com.nmims.careconnect.ui.common.DateUtils
 import com.nmims.careconnect.ui.common.StatusChip
+import com.nmims.careconnect.ui.patient.components.PatientActionTile
+import com.nmims.careconnect.ui.patient.components.PatientHeroCard
+import com.nmims.careconnect.ui.patient.components.PatientQuickActionCard
+import com.nmims.careconnect.ui.patient.components.PatientSectionHeader
+import com.nmims.careconnect.ui.patient.components.PatientWelcomeHeader
+import com.nmims.careconnect.ui.patient.components.UpcomingBookingCard
 import com.nmims.careconnect.ui.theme.CareConnectTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.catch
@@ -108,11 +117,13 @@ fun PatientHomeScreen(
     onLogout: () -> Unit
 ) {
     val context = LocalContext.current
-    val repository = remember(context) { AdmissionRepositoryProvider.get(context) }
+    val admissionRepo = remember(context) { AdmissionRepositoryProvider.get(context) }
+    val bookingRepo = remember(context) { BookingRepositoryProvider.get(context) }
     val patientId = AppSession.currentPatientId
     val userName = if (AppSession.currentUserName.isNotBlank()) AppSession.currentUserName else "Patient"
 
     var admissions by remember { mutableStateOf<List<Admission>?>(null) }
+    var upcomingBookings by remember { mutableStateOf<List<Booking>>(emptyList()) }
     var isStreamError by remember { mutableStateOf(false) }
     var retryTrigger by remember { mutableIntStateOf(0) }
     var showLogoutDialog by remember { mutableStateOf(false) }
@@ -120,12 +131,13 @@ fun PatientHomeScreen(
     LaunchedEffect(patientId, retryTrigger) {
         if (patientId.isBlank()) {
             admissions = emptyList()
+            upcomingBookings = emptyList()
             isStreamError = false
             return@LaunchedEffect
         }
 
         try {
-            repository.observeForPatient(patientId)
+            admissionRepo.observeForPatient(patientId)
                 .catch { e ->
                     if (e is CancellationException) throw e
                     isStreamError = true
@@ -141,6 +153,20 @@ fun PatientHomeScreen(
         }
     }
 
+    LaunchedEffect(patientId, retryTrigger) {
+        if (patientId.isNotBlank()) {
+            try {
+                val list = bookingRepo.getForPatient(patientId)
+                val now = System.currentTimeMillis() - (2 * 60 * 60 * 1000L) // allow ongoing day
+                upcomingBookings = list.filter {
+                    it.status == BookingStatus.CONFIRMED && it.dateMillis >= now
+                }.sortedBy { it.dateMillis }
+            } catch (_: Exception) {
+                upcomingBookings = emptyList()
+            }
+        }
+    }
+
     val activeAdmissions = remember(admissions) {
         (admissions ?: emptyList())
             .filter { it.status == AdmissionStatus.PENDING || it.status == AdmissionStatus.APPROVED }
@@ -153,6 +179,7 @@ fun PatientHomeScreen(
         userName = userName,
         activeAdmission = latestActiveAdmission,
         activeCount = activeCount,
+        upcomingBookings = upcomingBookings,
         isStreamError = isStreamError,
         onRetryStream = { retryTrigger++ },
         onNavigateToPortfolio = onNavigateToPortfolio,
@@ -193,53 +220,16 @@ fun PatientHomeContent(
     onNavigateToAdmissionForm: () -> Unit,
     onNavigateToMyAdmissions: () -> Unit,
     onLogoutClick: () -> Unit,
+    upcomingBookings: List<Booking> = emptyList(),
     onAdmissionClick: (String) -> Unit = {},
     hospitalLookup: (String) -> Hospital? = { HospitalRepository.getHospital(it) },
+    doctorLookup: (String) -> Doctor? = { HospitalRepository.getDoctor(it) },
     modifier: Modifier = Modifier
 ) {
     val admissionsSubtitle = when {
         activeCount > 0 -> "$activeCount active admission request${if (activeCount > 1) "s" else ""} • Tap to view tracking"
-        else -> "View current inpatient status, room allotment & discharge summaries"
+        else -> "Inpatient status, room allotment & discharge summaries"
     }
-
-    val features = listOf(
-        FeatureItem(
-            title = "My Medical Portfolio",
-            subtitle = "Manage health profile, records, uploaded reports & view forwardable summary",
-            icon = Icons.Default.FolderShared,
-            onClick = onNavigateToPortfolio
-        ),
-        FeatureItem(
-            title = "Find Hospitals & Doctors",
-            subtitle = "Search specialists, compare facilities, reviews & consultation fees",
-            icon = Icons.Default.Search,
-            onClick = onNavigateToSearch
-        ),
-        FeatureItem(
-            title = "Book Appointment / Lab Test",
-            subtitle = "Schedule in-person or video consultations and diagnostic lab tests",
-            icon = Icons.Default.CalendarMonth,
-            onClick = onNavigateToBookingHub
-        ),
-        FeatureItem(
-            title = "My Bookings",
-            subtitle = "Track active tokens, appointment slots, test results & past visits",
-            icon = Icons.Default.CheckCircleOutline,
-            onClick = onNavigateToMyBookings
-        ),
-        FeatureItem(
-            title = "Hospital Admission",
-            subtitle = "Direct admission request, bed allotment & emergency room triage",
-            icon = Icons.Default.Hotel,
-            onClick = onNavigateToAdmissionForm
-        ),
-        FeatureItem(
-            title = "My Admissions",
-            subtitle = admissionsSubtitle,
-            icon = Icons.Default.LocalHospital,
-            onClick = onNavigateToMyAdmissions
-        )
-    )
 
     Scaffold(
         topBar = {
@@ -263,23 +253,25 @@ fun PatientHomeContent(
                 .fillMaxSize()
                 .padding(innerPadding),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            // 1. Personalized Welcome Header
             item {
-                Column(modifier = Modifier.padding(vertical = 4.dp)) {
-                    Text(
-                        text = "Hello, $userName 👋",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Your healthcare hub. Book appointments, manage records & admissions.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                PatientWelcomeHeader(
+                    userName = userName,
+                    greetingSubtitle = "Your clinical care dashboard & health records"
+                )
+            }
+
+            // 2. Health-Focused Hero Card
+            item {
+                PatientHeroCard(
+                    title = "Complete Medical Portfolio",
+                    description = "Consolidate your prescriptions, emergency profile, verified records & reports for direct care sharing.",
+                    badgeText = "Clinical Record Hub",
+                    actionText = "Open Portfolio",
+                    onActionClick = onNavigateToPortfolio
+                )
             }
 
             // Non-blocking stream error banner with retry option
@@ -330,19 +322,146 @@ fun PatientHomeContent(
                 }
             }
 
-            // Interactive Active Inpatient Status Card (Only when activeAdmission != null)
+            // 3. Interactive Active Inpatient Status Card (if admission exists)
             if (activeAdmission != null) {
                 item {
-                    ActiveAdmissionCard(
-                        admission = activeAdmission,
-                        hospitalLookup = hospitalLookup,
-                        onClick = { onAdmissionClick(activeAdmission.id) }
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "Active Inpatient Admission",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        ActiveAdmissionCard(
+                            admission = activeAdmission,
+                            hospitalLookup = hospitalLookup,
+                            onClick = { onAdmissionClick(activeAdmission.id) }
+                        )
+                    }
+                }
+            }
+
+            // 4. Upcoming Appointments Section (if any)
+            if (upcomingBookings.isNotEmpty()) {
+                item {
+                    PatientSectionHeader(
+                        title = "Upcoming Appointments",
+                        subtitle = "Scheduled visits & diagnostic appointments",
+                        actionText = "View All",
+                        onActionClick = onNavigateToMyBookings
+                    )
+                }
+
+                items(upcomingBookings.take(2).size) { index ->
+                    val booking = upcomingBookings[index]
+                    val targetName = remember(booking) {
+                        if (booking.type == BookingType.OPD_APPOINTMENT && !booking.doctorId.isNullOrBlank()) {
+                            doctorLookup(booking.doctorId)?.name ?: "Consulting Specialist"
+                        } else {
+                            "Diagnostic Lab Test"
+                        }
+                    }
+                    val hospName = remember(booking) {
+                        hospitalLookup(booking.hospitalId)?.name ?: "Partner Hospital"
+                    }
+
+                    UpcomingBookingCard(
+                        booking = booking,
+                        targetName = targetName,
+                        hospitalName = hospName,
+                        onClick = onNavigateToMyBookings
                     )
                 }
             }
 
-            items(features) { feature ->
-                FeatureCard(item = feature)
+            // 5. Quick Action Grid
+            item {
+                PatientSectionHeader(
+                    title = "Quick Health Actions",
+                    subtitle = "Instant access to key healthcare services"
+                )
+            }
+
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        PatientQuickActionCard(
+                            title = "Book Doctor",
+                            subtitle = "OPD & video consults",
+                            icon = Icons.Default.CalendarMonth,
+                            onClick = onNavigateToBookingHub,
+                            modifier = Modifier.weight(1f)
+                        )
+                        PatientQuickActionCard(
+                            title = "Book Lab Test",
+                            subtitle = "Scans & pathology tests",
+                            icon = Icons.Default.Science,
+                            onClick = onNavigateToBookingHub,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        PatientQuickActionCard(
+                            title = "Find Doctors",
+                            subtitle = "Specialists & ratings",
+                            icon = Icons.Default.Search,
+                            onClick = onNavigateToSearch,
+                            modifier = Modifier.weight(1f)
+                        )
+                        PatientQuickActionCard(
+                            title = "Medical Portfolio",
+                            subtitle = "Summary & reports",
+                            icon = Icons.Default.FolderShared,
+                            onClick = onNavigateToPortfolio,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+
+            // 6. Hospital Admission & Inpatient Services
+            item {
+                PatientSectionHeader(
+                    title = "Hospital & Admission Hub",
+                    subtitle = "Request inpatient care or review active status"
+                )
+            }
+
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    PatientActionTile(
+                        title = "Hospital Admission Request",
+                        subtitle = "Direct admission request, bed allotment & triage",
+                        icon = Icons.Default.Hotel,
+                        onClick = onNavigateToAdmissionForm
+                    )
+
+                    PatientActionTile(
+                        title = "My Admissions",
+                        subtitle = admissionsSubtitle,
+                        icon = Icons.Default.LocalHospital,
+                        trailingBadge = if (activeCount > 0) "$activeCount Active" else null,
+                        onClick = onNavigateToMyAdmissions
+                    )
+
+                    PatientActionTile(
+                        title = "Booking History & Receipts",
+                        subtitle = "Track active tokens, appointment slots & past visits",
+                        icon = Icons.Default.CheckCircleOutline,
+                        onClick = onNavigateToMyBookings
+                    )
+                }
+            }
+
+            item {
+                Spacer(modifier = Modifier.height(8.dp))
             }
         }
     }
@@ -380,7 +499,8 @@ fun ActiveAdmissionCard(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
     ) {
         Column(
             modifier = Modifier
@@ -715,29 +835,6 @@ fun PatientHomeApprovedPreview() {
             activeAdmission = mockApprovedAdmissionForPreview,
             activeCount = 1,
             isStreamError = false,
-            onRetryStream = {},
-            onNavigateToPortfolio = {},
-            onNavigateToSearch = {},
-            onNavigateToBookingHub = {},
-            onNavigateToMyBookings = {},
-            onNavigateToAdmissionForm = {},
-            onNavigateToMyAdmissions = {},
-            onAdmissionClick = {},
-            onLogoutClick = {},
-            hospitalLookup = { mockHospitalForPreview }
-        )
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun PatientHomeErrorPreview() {
-    CareConnectTheme {
-        PatientHomeContent(
-            userName = "Rahul Sharma",
-            activeAdmission = mockApprovedAdmissionForPreview,
-            activeCount = 1,
-            isStreamError = true,
             onRetryStream = {},
             onNavigateToPortfolio = {},
             onNavigateToSearch = {},
