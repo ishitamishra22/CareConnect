@@ -309,6 +309,10 @@ fun CareConnectApp(
         is Screen.AdmissionSuccess -> {
             com.nmims.careconnect.ui.admission.AdmissionSuccessScreen(
                 admissionId = current.admissionId,
+                onViewAdmissionDetail = { admissionId ->
+                    navController.resetTo(Screen.PatientHome)
+                    navController.navigate(Screen.AdmissionDetail(admissionId))
+                },
                 onNavigateToMyAdmissions = {
                     navController.resetTo(Screen.PatientHome)
                     navController.navigate(Screen.MyAdmissions)
