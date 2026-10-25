@@ -16,18 +16,22 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
- * Coloured avatar showing initials extracted from a hospital or doctor name.
+ * Coloured avatar showing initials extracted from a hospital, patient, or doctor name.
  */
 @Composable
 fun InitialsAvatar(
     name: String,
-    colorHex: String,
+    colorHex: String = "",
     size: Dp = 40.dp,
     modifier: Modifier = Modifier
 ) {
-    val backgroundColor = try {
-        Color(android.graphics.Color.parseColor(colorHex))
-    } catch (e: Exception) {
+    val backgroundColor = if (colorHex.isNotBlank()) {
+        try {
+            Color(android.graphics.Color.parseColor(colorHex))
+        } catch (_: Exception) {
+            MaterialTheme.colorScheme.primary
+        }
+    } else {
         MaterialTheme.colorScheme.primary
     }
 
