@@ -79,6 +79,7 @@ import com.nmims.careconnect.session.AppSession
 import com.nmims.careconnect.ui.common.CareTopBar
 import com.nmims.careconnect.ui.common.PrimaryButton
 import com.nmims.careconnect.ui.common.SectionCard
+import com.nmims.careconnect.ui.patient.components.PatientHeroCard
 import com.nmims.careconnect.ui.theme.CareConnectTheme
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -106,7 +107,6 @@ fun AddDocumentScreen(
 
     var isSaving by rememberSaveable { mutableStateOf(false) }
 
-    // Camera launcher (TakePicturePreview returns direct Bitmap, no storage permissions needed)
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicturePreview()
     ) { bitmap ->
@@ -117,7 +117,6 @@ fun AddDocumentScreen(
         }
     }
 
-    // Gallery launcher (GetContent returns Uri, no runtime permissions needed)
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
@@ -197,7 +196,15 @@ fun AddDocumentScreen(
                 .padding(horizontal = 16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(10.dp))
+
+            PatientHeroCard(
+                title = "Upload Diagnostic Document",
+                description = "Scan or upload physical reports, lab tests, and imaging scans. Documents are stored privately and safely on device.",
+                badgeText = "Clinical Upload"
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
 
             SectionCard(title = "Document Details") {
                 // Title
@@ -209,7 +216,7 @@ fun AddDocumentScreen(
                     placeholder = { Text("e.g. Complete Blood Count (CBC)") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                    shape = RoundedCornerShape(10.dp)
+                    shape = RoundedCornerShape(12.dp)
                 )
 
                 Spacer(modifier = Modifier.height(14.dp))
@@ -231,7 +238,7 @@ fun AddDocumentScreen(
                         modifier = Modifier
                             .menuAnchor(MenuAnchorType.PrimaryNotEditable, true)
                             .fillMaxWidth(),
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(12.dp)
                     )
                     ExposedDropdownMenu(
                         expanded = categoryDropdownExpanded,
@@ -260,7 +267,7 @@ fun AddDocumentScreen(
                     placeholder = { Text("e.g. Test carried out at SRL Diagnostics") },
                     minLines = 3,
                     maxLines = 5,
-                    shape = RoundedCornerShape(10.dp)
+                    shape = RoundedCornerShape(12.dp)
                 )
             }
 
@@ -275,7 +282,7 @@ fun AddDocumentScreen(
                     OutlinedButton(
                         onClick = { cameraLauncher.launch(null) },
                         modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(12.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.CameraAlt,
@@ -289,7 +296,7 @@ fun AddDocumentScreen(
                     OutlinedButton(
                         onClick = { galleryLauncher.launch("image/*") },
                         modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(12.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.PhotoLibrary,
@@ -359,7 +366,7 @@ fun AddDocumentScreen(
                 enabled = isFormValid
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(36.dp))
         }
     }
 }

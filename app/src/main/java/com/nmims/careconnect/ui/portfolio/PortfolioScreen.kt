@@ -31,14 +31,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.HistoryEdu
 import androidx.compose.material.icons.filled.PersonOutline
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -63,11 +62,12 @@ import androidx.compose.ui.unit.sp
 import com.nmims.careconnect.data.model.PatientProfile
 import com.nmims.careconnect.data.repository.PortfolioRepositoryProvider
 import com.nmims.careconnect.ui.common.CareTopBar
-import com.nmims.careconnect.ui.common.EmptyState
-import com.nmims.careconnect.ui.common.InfoRow
-import com.nmims.careconnect.ui.common.LabelChip
 import com.nmims.careconnect.ui.common.LoadingIndicator
 import com.nmims.careconnect.ui.common.SectionCard
+import com.nmims.careconnect.ui.patient.components.EmptyStatePanel
+import com.nmims.careconnect.ui.patient.components.PatientHeroCard
+import com.nmims.careconnect.ui.patient.components.PatientSectionHeader
+import com.nmims.careconnect.ui.portfolio.components.PatientProfileCard
 import com.nmims.careconnect.ui.theme.CareConnectTheme
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -118,102 +118,51 @@ fun PortfolioScreen(
                 // Patient Profile Section
                 val currentProfile = profile
                 if (currentProfile == null) {
-                    EmptyState(
+                    EmptyStatePanel(
                         icon = Icons.Default.PersonOutline,
-                        message = "No profile created yet. Create your medical profile to enable fast hospital bookings and admission.",
-                        action = {
-                            FilledTonalButton(onClick = onNavigateToEditProfile) {
-                                Text("Create Medical Profile")
-                            }
-                        }
+                        title = "No Profile Created",
+                        message = "Create your comprehensive medical profile to enable fast hospital bookings and expedited admission.",
+                        actionText = "Create Medical Profile",
+                        onActionClick = onNavigateToEditProfile
                     )
                 } else {
-                    SectionCard(title = "Patient Information") {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = currentProfile.name,
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = "${currentProfile.age} yrs • ${currentProfile.gender} • Blood Group: ${currentProfile.bloodGroup}",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            IconButton(onClick = onNavigateToEditProfile) {
-                                Icon(
-                                    imageVector = Icons.Default.Edit,
-                                    contentDescription = "Edit Profile",
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-                        InfoRow(label = "Contact Phone", value = currentProfile.phone)
-                        if (currentProfile.email.isNotBlank()) {
-                            InfoRow(label = "Email", value = currentProfile.email)
-                        }
-                        InfoRow(label = "Emergency Contact", value = "${currentProfile.emergencyContactName} (${currentProfile.emergencyContactPhone})")
-                        InfoRow(label = "Address", value = currentProfile.address)
-
-                        // Allergies Chip Row
-                        if (currentProfile.allergies.isNotEmpty()) {
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Text(
-                                text = "Allergies:",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            FlowRow(
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                currentProfile.allergies.forEach { allergy ->
-                                    LabelChip(
-                                        text = allergy,
-                                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                                        contentColor = MaterialTheme.colorScheme.onErrorContainer
-                                    )
-                                }
-                            }
-                        }
-                    }
+                    PatientProfileCard(
+                        profile = currentProfile,
+                        onEditClick = onNavigateToEditProfile
+                    )
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(18.dp))
+
+                PatientSectionHeader(
+                    title = "Clinical Records & Documents",
+                    subtitle = "History, diagnostic reports and imaging"
+                )
 
                 // Stat Tiles: Records & Documents Count
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    StatTile(
+                    PortfolioStatTile(
                         title = "Medical Records",
                         count = recordsCount,
+                        subtitle = "Diagnoses & Rx",
                         icon = Icons.Default.HistoryEdu,
                         modifier = Modifier.weight(1f),
                         onClick = onNavigateToRecords
                     )
-                    StatTile(
+                    PortfolioStatTile(
                         title = "Documents",
                         count = documentsCount,
+                        subtitle = "Scans & Reports",
                         icon = Icons.Default.Description,
                         modifier = Modifier.weight(1f),
                         onClick = onNavigateToDocuments
                     )
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
                 // Navigation Buttons to Submodules
                 Row(
@@ -223,16 +172,16 @@ fun PortfolioScreen(
                     OutlinedButton(
                         onClick = onNavigateToRecords,
                         modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(12.dp)
                     ) {
-                        Text("Medical History")
+                        Text("View Medical History")
                     }
                     OutlinedButton(
                         onClick = onNavigateToDocuments,
                         modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(12.dp)
                     ) {
-                        Text("My Documents")
+                        Text("View Documents")
                     }
                 }
 
@@ -241,16 +190,16 @@ fun PortfolioScreen(
                 // Share Preview Section Card
                 SectionCard(title = "Forwardable Medical Portfolio Summary") {
                     Text(
-                        text = "This live summary is what gets forwarded automatically when you book consultations, lab tests, or hospital admissions in later modules—eliminating repeated paperwork.",
+                        text = "This live clinical summary is forwarded automatically when you book consultations, lab tests, or hospital admissions—eliminating repeated manual paperwork.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(8.dp),
+                        shape = RoundedCornerShape(12.dp),
                         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                     ) {
                         Text(
@@ -261,7 +210,7 @@ fun PortfolioScreen(
                                 lineHeight = 16.sp
                             ),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(12.dp)
+                            modifier = Modifier.padding(14.dp)
                         )
                     }
                 }
@@ -273,34 +222,44 @@ fun PortfolioScreen(
 }
 
 @Composable
-private fun StatTile(
+private fun PortfolioStatTile(
     title: String,
     count: Int,
+    subtitle: String,
     icon: ImageVector,
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
     Card(
         modifier = modifier.clickable { onClick() },
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
-        )
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
-            modifier = Modifier.padding(14.dp)
+            modifier = Modifier.padding(16.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = title,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp)
-                )
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.size(38.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = title,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                     contentDescription = null,
@@ -308,7 +267,7 @@ private fun StatTile(
                     modifier = Modifier.size(16.dp)
                 )
             }
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             Text(
                 text = "$count",
                 style = MaterialTheme.typography.headlineMedium,
@@ -317,7 +276,13 @@ private fun StatTile(
             )
             Text(
                 text = title,
-                style = MaterialTheme.typography.labelMedium,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }

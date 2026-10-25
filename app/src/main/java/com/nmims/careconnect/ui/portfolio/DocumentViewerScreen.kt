@@ -11,6 +11,7 @@ package com.nmims.careconnect.ui.portfolio
 
 import android.graphics.Bitmap
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -29,6 +30,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BrokenImage
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -48,6 +51,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.nmims.careconnect.data.model.MedicalDocument
@@ -56,8 +60,10 @@ import com.nmims.careconnect.ui.common.CareTopBar
 import com.nmims.careconnect.ui.common.ConfirmDialog
 import com.nmims.careconnect.ui.common.DateUtils
 import com.nmims.careconnect.ui.common.InfoRow
+import com.nmims.careconnect.ui.common.LabelChip
 import com.nmims.careconnect.ui.common.LoadingIndicator
 import com.nmims.careconnect.ui.common.SectionCard
+import com.nmims.careconnect.ui.patient.components.EmptyStatePanel
 import com.nmims.careconnect.ui.theme.CareConnectTheme
 import kotlinx.coroutines.launch
 
@@ -122,14 +128,16 @@ fun DocumentViewerScreen(
         } else {
             val doc = document
             if (doc == null) {
-                Box(
+                EmptyStatePanel(
+                    icon = Icons.Default.BrokenImage,
+                    title = "Document Not Found",
+                    message = "This document may have been deleted or moved.",
+                    actionText = "Back to Documents",
+                    onActionClick = onNavigateBack,
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(innerPadding),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("Document not found", style = MaterialTheme.typography.bodyLarge)
-                }
+                        .padding(innerPadding)
+                )
             } else {
                 Column(
                     modifier = Modifier
@@ -138,68 +146,93 @@ fun DocumentViewerScreen(
                         .padding(horizontal = 16.dp)
                         .verticalScroll(rememberScrollState())
                 ) {
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
                     // Image Display Card
                     val bitmap = documentBitmap
-                    if (bitmap != null) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(320.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f), RoundedCornerShape(12.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Image(
-                                bitmap = bitmap.asImageBitmap(),
-                                contentDescription = doc.title,
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Fit
-                            )
-                        }
-                    } else {
-                        Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(200.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                        ) {
-                            Column(
-                                modifier = Modifier.fillMaxSize(),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
+                    ) {
+                        if (bitmap != null) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(340.dp)
+                                    .clip(RoundedCornerShape(20.dp)),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.BrokenImage,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.outline,
-                                    modifier = Modifier.size(48.dp)
+                                Image(
+                                    bitmap = bitmap.asImageBitmap(),
+                                    contentDescription = doc.title,
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Fit
                                 )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = "Image file preview unavailable",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                            }
+                        } else {
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(220.dp),
+                                shape = RoundedCornerShape(20.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            ) {
+                                Column(
+                                    modifier = Modifier.fillMaxSize(),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.BrokenImage,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.outline,
+                                        modifier = Modifier.size(48.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "Image file preview unavailable",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(18.dp))
 
                     // Document Details
-                    SectionCard(title = "Document Information") {
-                        InfoRow(label = "Title", value = doc.title)
-                        InfoRow(label = "Category", value = doc.category.label)
-                        InfoRow(label = "Added On", value = DateUtils.formatWithDay(doc.addedOnMillis))
+                    SectionCard(title = "Clinical File Metadata") {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Category",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            LabelChip(
+                                text = doc.category.label,
+                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        InfoRow(label = "Document Title", value = doc.title)
+                        InfoRow(label = "Date Added", value = DateUtils.formatWithDay(doc.addedOnMillis))
                         if (doc.notes.isNotBlank()) {
-                            InfoRow(label = "Notes", value = doc.notes)
+                            InfoRow(label = "Clinical Notes", value = doc.notes)
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(32.dp))
+                    Spacer(modifier = Modifier.height(36.dp))
                 }
             }
         }
@@ -207,7 +240,7 @@ fun DocumentViewerScreen(
         if (showDeleteDialog) {
             ConfirmDialog(
                 title = "Delete Document",
-                message = "Are you sure you want to permanently delete this document and its attached image file?",
+                message = "Are you sure you want to permanently delete \"${document?.title ?: "this document"}\" and its image file?",
                 confirmText = "Delete",
                 onConfirm = { handleDelete() },
                 onDismiss = { showDeleteDialog = false }

@@ -66,6 +66,7 @@ import com.nmims.careconnect.ui.common.DateUtils
 import com.nmims.careconnect.ui.common.LoadingIndicator
 import com.nmims.careconnect.ui.common.PrimaryButton
 import com.nmims.careconnect.ui.common.SectionCard
+import com.nmims.careconnect.ui.patient.components.PatientHeroCard
 import com.nmims.careconnect.ui.theme.CareConnectTheme
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -98,7 +99,6 @@ fun AddEditRecordScreen(
         initialSelectedDateMillis = dateMillis,
         selectableDates = object : SelectableDates {
             override fun isSelectableDate(utcTimeMillis: Long): Boolean {
-                // Cannot be in the future (allow up to today end)
                 return utcTimeMillis <= System.currentTimeMillis()
             }
         }
@@ -178,7 +178,15 @@ fun AddEditRecordScreen(
                     .padding(horizontal = 16.dp)
                     .verticalScroll(rememberScrollState())
             ) {
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
+
+                PatientHeroCard(
+                    title = if (recordId == null) "Clinical History Entry" else "Update Clinical Record",
+                    description = "Accurate medical history facilitates precise specialist evaluation and automated admission triage.",
+                    badgeText = "Health Record"
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
 
                 SectionCard(title = "Record Details") {
                     // Record Type Dropdown
@@ -198,7 +206,7 @@ fun AddEditRecordScreen(
                             modifier = Modifier
                                 .menuAnchor(MenuAnchorType.PrimaryNotEditable, true)
                                 .fillMaxWidth(),
-                            shape = RoundedCornerShape(10.dp)
+                            shape = RoundedCornerShape(12.dp)
                         )
                         ExposedDropdownMenu(
                             expanded = typeDropdownExpanded,
@@ -228,7 +236,7 @@ fun AddEditRecordScreen(
                         isError = title.isNotBlank() && !isTitleValid,
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(12.dp)
                     )
 
                     Spacer(modifier = Modifier.height(14.dp))
@@ -243,7 +251,7 @@ fun AddEditRecordScreen(
                             value = DateUtils.formatWithDay(dateMillis),
                             onValueChange = {},
                             readOnly = true,
-                            enabled = false, // Disabled for keyboard focus, container intercepts click
+                            enabled = false,
                             modifier = Modifier.fillMaxWidth(),
                             label = { Text("Date of Consultation / Record *") },
                             trailingIcon = {
@@ -253,7 +261,7 @@ fun AddEditRecordScreen(
                                     tint = MaterialTheme.colorScheme.primary
                                 )
                             },
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(12.dp),
                             colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
                                 disabledTextColor = MaterialTheme.colorScheme.onSurface,
                                 disabledBorderColor = MaterialTheme.colorScheme.outline,
@@ -275,7 +283,7 @@ fun AddEditRecordScreen(
                         placeholder = { Text("e.g. Dr. A. Sharma") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(12.dp)
                     )
 
                     Spacer(modifier = Modifier.height(14.dp))
@@ -288,7 +296,7 @@ fun AddEditRecordScreen(
                         placeholder = { Text("e.g. Apollo Hospital / Care Clinic") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(12.dp)
                     )
 
                     Spacer(modifier = Modifier.height(14.dp))
@@ -301,7 +309,7 @@ fun AddEditRecordScreen(
                         placeholder = { Text("Enter doctor recommendations, dosage, or diagnostic results") },
                         minLines = 4,
                         maxLines = 8,
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(12.dp)
                     )
                 }
 
@@ -313,7 +321,7 @@ fun AddEditRecordScreen(
                     enabled = isTitleValid && !isSaving
                 )
 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(36.dp))
             }
         }
 

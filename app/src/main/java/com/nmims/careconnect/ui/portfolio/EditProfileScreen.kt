@@ -48,6 +48,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
@@ -59,6 +60,7 @@ import com.nmims.careconnect.ui.common.CareTopBar
 import com.nmims.careconnect.ui.common.LoadingIndicator
 import com.nmims.careconnect.ui.common.PrimaryButton
 import com.nmims.careconnect.ui.common.SectionCard
+import com.nmims.careconnect.ui.patient.components.PatientHeroCard
 import com.nmims.careconnect.ui.theme.CareConnectTheme
 import kotlinx.coroutines.launch
 
@@ -199,7 +201,15 @@ fun EditProfileScreen(
                     .padding(horizontal = 16.dp)
                     .verticalScroll(rememberScrollState())
             ) {
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
+
+                PatientHeroCard(
+                    title = "Medical Profile Details",
+                    description = "Ensure accurate demographic and clinical history. This emergency profile is presented to admitting doctors.",
+                    badgeText = "Clinical Identity"
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
 
                 // Basic Identity Section
                 SectionCard(title = "Personal Information") {
@@ -216,7 +226,7 @@ fun EditProfileScreen(
                         },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(12.dp)
                     )
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -235,7 +245,7 @@ fun EditProfileScreen(
                             },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            shape = RoundedCornerShape(10.dp)
+                            shape = RoundedCornerShape(12.dp)
                         )
 
                         Spacer(modifier = Modifier.width(12.dp))
@@ -257,7 +267,7 @@ fun EditProfileScreen(
                                 modifier = Modifier
                                     .menuAnchor(MenuAnchorType.PrimaryNotEditable, true)
                                     .fillMaxWidth(),
-                                shape = RoundedCornerShape(10.dp)
+                                shape = RoundedCornerShape(12.dp)
                             )
                             ExposedDropdownMenu(
                                 expanded = genderExpanded,
@@ -295,7 +305,7 @@ fun EditProfileScreen(
                             modifier = Modifier
                                 .menuAnchor(MenuAnchorType.PrimaryNotEditable, true)
                                 .fillMaxWidth(),
-                            shape = RoundedCornerShape(10.dp)
+                            shape = RoundedCornerShape(12.dp)
                         )
                         ExposedDropdownMenu(
                             expanded = bloodGroupExpanded,
@@ -331,7 +341,7 @@ fun EditProfileScreen(
                         },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(12.dp)
                     )
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -349,7 +359,7 @@ fun EditProfileScreen(
                         },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(12.dp)
                     )
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -365,7 +375,7 @@ fun EditProfileScreen(
                                 Text("Address is required", color = MaterialTheme.colorScheme.error)
                             }
                         },
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(12.dp)
                     )
                 }
 
@@ -379,7 +389,7 @@ fun EditProfileScreen(
                         modifier = Modifier.fillMaxWidth(),
                         label = { Text("Emergency Contact Name *") },
                         singleLine = true,
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(12.dp)
                     )
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -397,7 +407,7 @@ fun EditProfileScreen(
                         },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(12.dp)
                     )
                 }
 
@@ -411,7 +421,7 @@ fun EditProfileScreen(
                         modifier = Modifier.fillMaxWidth(),
                         label = { Text("Allergies") },
                         placeholder = { Text("e.g. Penicillin, Peanuts, Pollen") },
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(12.dp)
                     )
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -422,7 +432,7 @@ fun EditProfileScreen(
                         modifier = Modifier.fillMaxWidth(),
                         label = { Text("Chronic Conditions") },
                         placeholder = { Text("e.g. Asthma, Hypertension, Diabetes") },
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(12.dp)
                     )
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -433,7 +443,7 @@ fun EditProfileScreen(
                         modifier = Modifier.fillMaxWidth(),
                         label = { Text("Current Medications") },
                         placeholder = { Text("e.g. Metformin 500mg, Inhaler") },
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(12.dp)
                     )
                 }
 
@@ -445,7 +455,7 @@ fun EditProfileScreen(
                     enabled = isFormValid && !isSaving
                 )
 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(36.dp))
             }
         }
     }

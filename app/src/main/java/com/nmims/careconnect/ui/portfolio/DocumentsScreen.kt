@@ -12,19 +12,23 @@ package com.nmims.careconnect.ui.portfolio
  */
 
 import android.graphics.Bitmap
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -63,9 +67,10 @@ import com.nmims.careconnect.data.repository.PortfolioRepositoryProvider
 import com.nmims.careconnect.data.storage.FileStorageManager
 import com.nmims.careconnect.ui.common.CareTopBar
 import com.nmims.careconnect.ui.common.DateUtils
-import com.nmims.careconnect.ui.common.EmptyState
 import com.nmims.careconnect.ui.common.LabelChip
 import com.nmims.careconnect.ui.common.LoadingIndicator
+import com.nmims.careconnect.ui.patient.components.EmptyStatePanel
+import com.nmims.careconnect.ui.patient.components.PatientHeroCard
 import com.nmims.careconnect.ui.theme.CareConnectTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -100,7 +105,8 @@ fun DocumentsScreen(
             FloatingActionButton(
                 onClick = onNavigateToAddDocument,
                 containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                shape = RoundedCornerShape(16.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.Add,
@@ -112,10 +118,15 @@ fun DocumentsScreen(
         if (isLoading) {
             LoadingIndicator(modifier = Modifier.padding(innerPadding))
         } else if (documents.isEmpty()) {
-            EmptyState(
+            EmptyStatePanel(
                 icon = Icons.Default.Description,
-                message = "No healthcare documents uploaded yet.\nTap the + button to photograph prescriptions, lab reports, or scans.",
-                modifier = Modifier.padding(innerPadding)
+                title = "No Documents Uploaded",
+                message = "Securely upload lab test reports, discharge summaries, insurance policies, and doctor prescriptions.",
+                actionText = "Upload First Document",
+                onActionClick = onNavigateToAddDocument,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
             )
         } else {
             LazyVerticalGrid(
@@ -127,12 +138,24 @@ fun DocumentsScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(documents, key = { it.id }) { doc ->
-                    DocumentGridCard(
-                        document = doc,
-                        storageManager = storageManager,
-                        onClick = { onNavigateToViewer(doc.id) }
+                item(span = { GridItemSpan(2) }) {
+                    PatientHeroCard(
+                        title = "${documents.size} Attached Medical Documents",
+                        description = "Stored securely in private application storage. Tap any document to preview or manage.",
+                        badgeText = "Clinical Files"
                     )
+                }
+
+                items(documents, key = { it.id }) { document ->
+                    DocumentCard(
+                        document = document,
+                        storageManager = storageManager,
+                        onClick = { onNavigateToViewer(document.id) }
+                    )
+                }
+
+                item(span = { GridItemSpan(2) }) {
+                    Spacer(modifier = Modifier.height(72.dp))
                 }
             }
         }
@@ -140,18 +163,24 @@ fun DocumentsScreen(
 }
 
 @Composable
-private fun DocumentGridCard(
+private fun DocumentCard(
     document: MedicalDocument,
     storageManager: FileStorageManager,
     onClick: () -> Unit
 ) {
-    var thumbnailBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    val coroutineScope = rememberCoroutineScope()
+    var bitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var isLoadingBitmap by remember { mutableStateOf(true) }
 
     LaunchedEffect(document.storagePath) {
-        if (document.storagePath.isNotBlank()) {
-            withContext(Dispatchers.IO) {
-                thumbnailBitmap = storageManager.loadBitmap(document.storagePath)
+        coroutineScope.launch {
+            if (document.storagePath.isNotBlank()) {
+                val loaded = withContext(Dispatchers.IO) {
+                    storageManager.loadBitmap(document.storagePath)
+                }
+                bitmap = loaded
             }
+            isLoadingBitmap = false
         }
     }
 
@@ -159,50 +188,64 @@ private fun DocumentGridCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() },
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
     ) {
-        Column {
-            // Thumbnail Area
-            val bmp = thumbnailBitmap
-            if (bmp != null) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(120.dp)
-                        .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
-                ) {
-                    Image(
-                        bitmap = bmp.asImageBitmap(),
-                        contentDescription = document.title,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                }
-            } else {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1.25f)
+                    .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)),
+                contentAlignment = Alignment.Center
+            ) {
                 Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(120.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
-                    shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Default.Image,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(36.dp)
+                    if (isLoadingBitmap) {
+                        Box(contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    } else if (bitmap != null) {
+                        Image(
+                            bitmap = bitmap!!.asImageBitmap(),
+                            contentDescription = document.title,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
                         )
+                    } else {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.Image,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.outline,
+                                modifier = Modifier.size(36.dp)
+                            )
+                        }
                     }
                 }
             }
 
-            // Metadata Area
-            Column(modifier = Modifier.padding(12.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp)
+            ) {
+                LabelChip(
+                    text = document.category.label,
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = document.title,
                     style = MaterialTheme.typography.titleSmall,
@@ -211,13 +254,7 @@ private fun DocumentGridCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                LabelChip(text = document.category.label)
-
-                Spacer(modifier = Modifier.height(6.dp))
-
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = DateUtils.format(document.addedOnMillis),
                     style = MaterialTheme.typography.labelSmall,
