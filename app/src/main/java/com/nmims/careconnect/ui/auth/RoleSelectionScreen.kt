@@ -157,7 +157,6 @@ fun RoleSelectionScreen(
             RoleCard(
                 title = "Patient",
                 subtitle = "Manage your health portfolio, book appointments & admissions",
-                badgeText = "Personal Health",
                 icon = Icons.Default.Person,
                 onClick = { onRoleSelected(UserRole.PATIENT) }
             )
@@ -168,7 +167,6 @@ fun RoleSelectionScreen(
             RoleCard(
                 title = "Doctor",
                 subtitle = "Consultations, view patient portfolios & clinical notes",
-                badgeText = "Clinical Portal",
                 icon = Icons.Default.MedicalServices,
                 onClick = { onRoleSelected(UserRole.DOCTOR) }
             )
@@ -179,7 +177,6 @@ fun RoleSelectionScreen(
             RoleCard(
                 title = "Hospital Admin",
                 subtitle = "Manage hospital admissions, beds & emergency requests",
-                badgeText = "Administration",
                 icon = Icons.Default.AdminPanelSettings,
                 onClick = { onRoleSelected(UserRole.HOSPITAL_ADMIN) }
             )
@@ -288,7 +285,6 @@ private fun ThemeOptionIcon(
 private fun RoleCard(
     title: String,
     subtitle: String,
-    badgeText: String,
     icon: ImageVector,
     onClick: () -> Unit
 ) {
@@ -341,18 +337,7 @@ private fun RoleCard(
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
-                    ) {
-                        Text(
-                            text = badgeText,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
-                    }
+
                 }
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
