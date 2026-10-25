@@ -92,6 +92,9 @@ import com.nmims.careconnect.data.model.UserRole
 import com.nmims.careconnect.session.AppSession
 import com.nmims.careconnect.ui.common.RatingInput
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.ui.graphics.Color
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -149,6 +152,7 @@ fun HospitalDetailScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .navigationBarsPadding()
                         .padding(16.dp)
                 ) {
                     PrimaryButton(
@@ -623,8 +627,12 @@ fun HospitalDetailScreen(
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 3,
                         maxLines = 5,
-                        enabled = !isSubmittingReview
-                    )
+                        enabled = !isSubmittingReview,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF0B858B),
+                            unfocusedBorderColor = Color(0xFF8A9BAA),
+                            cursorColor = Color(0xFF0B858B)
+                    ))
                 }
             },
             confirmButton = {
