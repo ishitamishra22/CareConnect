@@ -15,6 +15,9 @@ package com.nmims.careconnect.ui.admission
  * - Extracted stateless AdmissionDetailContent with isolated Compose Previews
  */
 
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,9 +35,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.HourglassTop
+import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.MeetingRoom
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SearchOff
@@ -88,7 +93,8 @@ sealed interface AdmissionDetailUiState {
 @Composable
 fun AdmissionDetailScreen(
     admissionId: String,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onHospitalClick: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     val repository = remember(context) { AdmissionRepositoryProvider.get(context) }
@@ -144,6 +150,7 @@ fun AdmissionDetailScreen(
         uiState = uiState,
         onNavigateBack = onNavigateBack,
         onRetry = { retryTrigger++ },
+        onHospitalClick = onHospitalClick,
         hospitalLookup = { hospitalId -> HospitalRepository.getHospital(hospitalId) }
     )
 }
@@ -153,9 +160,11 @@ fun AdmissionDetailContent(
     uiState: AdmissionDetailUiState,
     onNavigateBack: () -> Unit,
     onRetry: () -> Unit,
+    onHospitalClick: (String) -> Unit = {},
     hospitalLookup: (String) -> Hospital? = { HospitalRepository.getHospital(it) },
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     Scaffold(
         topBar = {
             CareTopBar(
@@ -510,9 +519,75 @@ fun AdmissionDetailContent(
                             if (hospital.emergency24x7) {
                                 DetailItem("Emergency Care", "24/7 Emergency Available")
                             }
+
+                            val cleanPhone = hospital.phone.replace(Regex("[^0-9+]"), "")
+                            val hasValidPhone = cleanPhone.count { it.isDigit() } >= 7
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            if (hasValidPhone) {
+                                Button(
+                                    onClick = {
+                                        try {
+                                            val dialIntent = Intent(Intent.ACTION_DIAL).apply {
+                                                data = Uri.parse("tel:$cleanPhone")
+                                            }
+                                            context.startActivity(dialIntent)
+                                        } catch (_: Exception) {
+                                            Toast.makeText(
+                                                context,
+                                                "Unable to launch phone dialer",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Call,
+                                        contentDescription = "Call Desk",
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Call Desk", style = MaterialTheme.typography.labelLarge)
+                                }
+
+                                Spacer(modifier = Modifier.height(8.dp))
+                            }
+
+                            OutlinedButton(
+                                onClick = { onHospitalClick(record.hospitalId) },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.LocalHospital,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("View Hospital Profile", style = MaterialTheme.typography.labelLarge)
+                            }
                         } else {
                             DetailItem("Hospital ID", record.hospitalId)
                             DetailItem("Facility Status", "Directory information unavailable offline")
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            OutlinedButton(
+                                onClick = { onHospitalClick(record.hospitalId) },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.LocalHospital,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("View Hospital Profile", style = MaterialTheme.typography.labelLarge)
+                            }
                         }
                     }
 
