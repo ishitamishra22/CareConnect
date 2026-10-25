@@ -77,6 +77,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -88,14 +89,20 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.nmims.careconnect.data.model.Admission
+import com.nmims.careconnect.data.model.AdmissionStatus
 import com.nmims.careconnect.data.model.InsuranceDetails
 import com.nmims.careconnect.data.model.RoomType
+import com.nmims.careconnect.data.repository.AdmissionRepositoryProvider
 import com.nmims.careconnect.data.repository.HospitalRepository
 import com.nmims.careconnect.data.repository.PortfolioRepositoryProvider
+import com.nmims.careconnect.session.AppSession
 import com.nmims.careconnect.ui.common.CareTopBar
 import com.nmims.careconnect.ui.common.DateUtils
 import com.nmims.careconnect.ui.common.SectionCard
 import com.nmims.careconnect.ui.theme.CareConnectTheme
+import java.util.UUID
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -138,7 +145,9 @@ fun AdmissionFormScreen(
 
     // Step 2: Patient Details Form State
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val portfolioRepo = remember { PortfolioRepositoryProvider.get(context) }
+    val admissionRepo = remember(context) { AdmissionRepositoryProvider.get(context) }
     val isPreviewMode = LocalInspectionMode.current
 
     var patientName by rememberSaveable { mutableStateOf("") }
@@ -339,7 +348,10 @@ fun AdmissionFormScreen(
     var sumInsuredText by rememberSaveable { mutableStateOf("") }
     var showInsuranceDatePickerDialog by rememberSaveable { mutableStateOf(false) }
     var step4Touched by rememberSaveable { mutableStateOf(false) }
-    var showReviewReadyDialog by rememberSaveable { mutableStateOf(false) }
+    var isSubmitting by rememberSaveable { mutableStateOf(false) }
+    var submissionErrorMessage by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingAdmissionId by rememberSaveable { mutableStateOf<String?>(null) }
+    var hasNavigatedSuccess by rememberSaveable { mutableStateOf(false) }
 
     // Pre-fill policyholder name with patient name when entering Step 4 if not yet set
     LaunchedEffect(currentStep, patientName) {
@@ -409,8 +421,8 @@ fun AdmissionFormScreen(
         else -> null
     }
 
-    // Custom back handler for multi-step wizard navigation
-    BackHandler(enabled = true) {
+    // Custom back handler for multi-step wizard navigation, disabled during submission
+    BackHandler(enabled = !isSubmitting && !hasNavigatedSuccess) {
         if (currentStep > 1) {
             currentStep -= 1
         } else {
@@ -426,6 +438,112 @@ fun AdmissionFormScreen(
             3 -> isStep3Valid
             4 -> isStep4Valid
             else -> false
+        }
+    }
+
+    // Submit inpatient admission request to Cloud Firestore
+    fun submitAdmission() {
+        if (isSubmitting || hasNavigatedSuccess) return
+        if (!validateCurrentStep(4)) {
+            step4Touched = true
+            return
+        }
+
+        val patientId = AppSession.currentPatientId
+        if (patientId.isBlank()) {
+            submissionErrorMessage = "Unable to resolve your patient identity. Please ensure you are logged in to submit an admission request."
+            return
+        }
+
+        isSubmitting = true
+        coroutineScope.launch {
+            try {
+                if (isPreviewMode) {
+                    hasNavigatedSuccess = true
+                    onAdmissionSuccess("preview-admission-id")
+                    return@launch
+                }
+
+                // Retrieve latest shareable medical summary from PortfolioRepository
+                val shareableSummary = try {
+                    portfolioRepo.getSummary().toShareableText()
+                } catch (_: Exception) {
+                    ""
+                }
+
+                // Construct insurance details if not self-paying
+                val insuranceDetails = if (noInsurance) {
+                    null
+                } else {
+                    InsuranceDetails(
+                        providerName = trimmedProvider,
+                        policyNumber = trimmedPolicyNumber,
+                        policyHolderName = trimmedPolicyHolder,
+                        validTillMillis = insuranceValidTillMillis ?: 0L,
+                        sumInsured = sumInsuredInt ?: 0
+                    )
+                }
+
+                // Parse clinical history lists cleanly without empty tokens
+                val allergiesList = allergiesText
+                    .split(",")
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() }
+                val conditionsList = chronicConditionsText
+                    .split(",")
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() }
+                val medicationsList = medicationsText
+                    .split(",")
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() }
+
+                // Stable admission ID across retries; generated once per submission draft
+                val admissionId = pendingAdmissionId ?: UUID.randomUUID().toString().also { pendingAdmissionId = it }
+
+                val admission = Admission(
+                    id = admissionId,
+                    patientId = patientId,
+                    patientName = trimmedPatientName,
+                    hospitalId = selectedHospitalId,
+                    reasonForAdmission = reason.trim(),
+                    referringDoctor = referringDoctor.trim().ifBlank { null },
+                    preferredDateMillis = preferredDateMillis ?: 0L,
+                    expectedStayDays = stayDays,
+                    roomTypeName = selectedRoomType?.name ?: selectedRoomTypeName,
+                    pricePerDay = pricePerDay,
+                    estimatedCost = estimatedCostInt,
+                    patientAge = patientAgeInt ?: 0,
+                    gender = gender,
+                    bloodGroup = bloodGroup,
+                    phone = trimmedPhone,
+                    address = trimmedAddress,
+                    emergencyContactName = trimmedEmergName,
+                    emergencyContactPhone = trimmedEmergPhone,
+                    allergies = allergiesList,
+                    chronicConditions = conditionsList,
+                    currentMedications = medicationsList,
+                    sharedPortfolioText = shareableSummary,
+                    insurance = insuranceDetails,
+                    status = AdmissionStatus.PENDING,
+                    assignedRoomNumber = null,
+                    adminRemark = null,
+                    createdAtMillis = System.currentTimeMillis()
+                )
+
+                val success = admissionRepo.add(admission)
+                if (success) {
+                    hasNavigatedSuccess = true
+                    onAdmissionSuccess(admission.id)
+                } else {
+                    submissionErrorMessage = "Failed to submit admission request. Please check your network connection and try again."
+                }
+            } catch (e: Exception) {
+                submissionErrorMessage = e.localizedMessage
+                    ?: "An unexpected error occurred while submitting your admission request. Please try again."
+            } finally {
+                isSubmitting = false
+            }
         }
     }
 
@@ -537,35 +655,46 @@ fun AdmissionFormScreen(
         }
     }
 
-    // Step 4 Review Ready Confirmation Dialog (validates form without writing to Firestore or triggering broadcasts)
-    if (showReviewReadyDialog) {
+    // Submission Error Dialog with retry capability without clearing entered form data
+    if (submissionErrorMessage != null) {
+        val hasValidSession = AppSession.currentPatientId.isNotBlank()
         AlertDialog(
-            onDismissRequest = { showReviewReadyDialog = false },
-            icon = {
-                Icon(
-                    imageVector = Icons.Default.CheckCircle,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(36.dp)
-                )
+            onDismissRequest = {
+                submissionErrorMessage = null
             },
             title = {
                 Text(
-                    text = "Admission Review Complete",
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center
+                    text = "Submission Failed",
+                    fontWeight = FontWeight.Bold
                 )
             },
             text = {
                 Text(
-                    text = "All admission details for ${trimmedPatientName.ifBlank { "the patient" }} at ${selectedHospital?.name ?: "the hospital"} have been verified and are ready for submission.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.Center
+                    text = submissionErrorMessage ?: "Unable to complete admission request.",
+                    style = MaterialTheme.typography.bodyMedium
                 )
             },
             confirmButton = {
-                Button(onClick = { showReviewReadyDialog = false }) {
-                    Text("OK")
+                Button(
+                    onClick = {
+                        submissionErrorMessage = null
+                        if (hasValidSession) {
+                            submitAdmission()
+                        }
+                    }
+                ) {
+                    Text(if (hasValidSession) "Retry" else "OK")
+                }
+            },
+            dismissButton = {
+                if (hasValidSession) {
+                    OutlinedButton(
+                        onClick = {
+                            submissionErrorMessage = null
+                        }
+                    ) {
+                        Text("Dismiss")
+                    }
                 }
             }
         )
@@ -576,10 +705,12 @@ fun AdmissionFormScreen(
             CareTopBar(
                 title = "Hospital Admission",
                 onBack = {
-                    if (currentStep > 1) {
-                        currentStep -= 1
-                    } else {
-                        onNavigateBack()
+                    if (!isSubmitting && !hasNavigatedSuccess) {
+                        if (currentStep > 1) {
+                            currentStep -= 1
+                        } else {
+                            onNavigateBack()
+                        }
                     }
                 }
             )
@@ -602,7 +733,8 @@ fun AdmissionFormScreen(
                         OutlinedButton(
                             onClick = { currentStep -= 1 },
                             modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(12.dp)
+                            shape = RoundedCornerShape(12.dp),
+                            enabled = !isSubmitting && !hasNavigatedSuccess
                         ) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
@@ -632,13 +764,13 @@ fun AdmissionFormScreen(
                             } else {
                                 step4Touched = true
                                 if (validateCurrentStep(4)) {
-                                    showReviewReadyDialog = true
+                                    submitAdmission()
                                 }
                             }
                         },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp),
-                        enabled = validateCurrentStep(currentStep)
+                        enabled = !isSubmitting && !hasNavigatedSuccess && validateCurrentStep(currentStep)
                     ) {
                         if (currentStep < 4) {
                             Text("Next")
@@ -648,6 +780,19 @@ fun AdmissionFormScreen(
                                 contentDescription = null,
                                 modifier = Modifier.size(18.dp)
                             )
+                        } else if (isSubmitting) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Submitting...")
+                            }
                         } else {
                             Text("Review & Submit")
                         }
@@ -1686,7 +1831,7 @@ fun AdmissionFormScreen(
                             ReviewSubCard(
                                 title = "Hospital & Admission Reason",
                                 icon = Icons.Default.LocalHospital,
-                                onEditClick = { currentStep = 1 }
+                                onEditClick = if (!isSubmitting && !hasNavigatedSuccess) { { currentStep = 1 } } else null
                             ) {
                                 ReviewDetailRow("Partner Hospital", selectedHospital?.name ?: "—")
                                 ReviewDetailRow("Location", "${selectedHospital?.area ?: ""}, ${selectedHospital?.city ?: "Mumbai"}")
@@ -1702,7 +1847,7 @@ fun AdmissionFormScreen(
                             ReviewSubCard(
                                 title = "Patient Details",
                                 icon = Icons.Default.Person,
-                                onEditClick = { currentStep = 2 }
+                                onEditClick = if (!isSubmitting && !hasNavigatedSuccess) { { currentStep = 2 } } else null
                             ) {
                                 ReviewDetailRow("Full Name", trimmedPatientName)
                                 ReviewDetailRow("Age & Gender", "${patientAgeInt ?: 0} yrs • $gender")
@@ -1727,7 +1872,7 @@ fun AdmissionFormScreen(
                             ReviewSubCard(
                                 title = "Room Category & Stay",
                                 icon = Icons.Default.CalendarMonth,
-                                onEditClick = { currentStep = 3 }
+                                onEditClick = if (!isSubmitting && !hasNavigatedSuccess) { { currentStep = 3 } } else null
                             ) {
                                 ReviewDetailRow("Room Category", selectedRoomType?.name ?: selectedRoomTypeName.ifBlank { "—" })
                                 ReviewDetailRow("Daily Rate", if (selectedRoomType != null) "₹${selectedRoomType.pricePerDay} / day" else "—")
