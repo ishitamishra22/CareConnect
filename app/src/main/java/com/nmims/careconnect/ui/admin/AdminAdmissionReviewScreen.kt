@@ -5,7 +5,8 @@ package com.nmims.careconnect.ui.admin
  * Hospital administrator interface for evaluating and adjudicating admission requests:
  * - Restricts access strictly to authenticated UserRole.HOSPITAL_ADMIN sessions with matching hospitalId
  * - Distinguishes unauthenticated, unauthorized, loading, missing-record, and error states
- * - Displays complete patient profile, emergency contacts, allergies, chronic conditions, current medications
+ * - Displays complete patient profile with InitialsAvatar, emergency contacts, allergies, chronic conditions, current medications
+ * - Phone dialer integration for rapid patient and emergency contact phone calling
  * - Displays requested room accommodation, daily rate, stay duration, preferred date, and estimated stay cost
  * - Displays health insurance claim coverage details or self-pay designation
  * - Displays patient's shareable medical portfolio summary
@@ -13,7 +14,7 @@ package com.nmims.careconnect.ui.admin
  *   - Approve: Dialog requiring trimmed room/bed number (min 2 chars) and optional remark, updates status to APPROVED
  *   - Reject: Dialog requiring trimmed rejection remark (min 5 chars), updates status to REJECTED
  *   - Mark Discharged: Confirmation dialog visible only for APPROVED requests, updates status to DISCHARGED
- * - Enforces submit-locks, error recovery, and proper cancellation handling
+ * - Enforces submit-locks, error recovery, theme-adaptive status colors, and proper cancellation handling
  * - Extracted stateless AdminAdmissionReviewContent with isolated Compose Previews
  */
 
@@ -21,6 +22,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,16 +45,22 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.FolderShared
+import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.MeetingRoom
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SearchOff
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -67,7 +75,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -77,6 +84,7 @@ import com.nmims.careconnect.data.model.Admission
 import com.nmims.careconnect.data.model.AdmissionStatus
 import com.nmims.careconnect.data.model.Hospital
 import com.nmims.careconnect.data.model.InsuranceDetails
+import com.nmims.careconnect.data.model.RoomType
 import com.nmims.careconnect.data.model.UserRole
 import com.nmims.careconnect.data.repository.AdmissionRepositoryProvider
 import com.nmims.careconnect.data.repository.HospitalRepository
@@ -84,18 +92,20 @@ import com.nmims.careconnect.session.AppSession
 import com.nmims.careconnect.ui.common.CareTopBar
 import com.nmims.careconnect.ui.common.DateUtils
 import com.nmims.careconnect.ui.common.EmptyState
+import com.nmims.careconnect.ui.common.LabelChip
 import com.nmims.careconnect.ui.common.LoadingIndicator
 import com.nmims.careconnect.ui.common.SectionCard
 import com.nmims.careconnect.ui.common.StatusChip
+import com.nmims.careconnect.ui.common.admissionStatusContainerColor
 import com.nmims.careconnect.ui.theme.CareConnectTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 sealed interface AdminAdmissionReviewUiState {
-    object Loading : AdminAdmissionReviewUiState
-    object Unauthenticated : AdminAdmissionReviewUiState
-    object Unauthorized : AdminAdmissionReviewUiState
-    object NotFound : AdminAdmissionReviewUiState
+    data object Loading : AdminAdmissionReviewUiState
+    data object Unauthenticated : AdminAdmissionReviewUiState
+    data object Unauthorized : AdminAdmissionReviewUiState
+    data object NotFound : AdminAdmissionReviewUiState
     data class Error(val message: String) : AdminAdmissionReviewUiState
     data class Success(val admission: Admission) : AdminAdmissionReviewUiState
 }
@@ -197,14 +207,22 @@ fun AdminAdmissionReviewScreen(
 
         AlertDialog(
             onDismissRequest = { if (!isProcessing) showApproveDialog = false },
-            title = { Text("Approve Admission & Assign Bed") },
+            title = {
+                Text(
+                    text = "Approve Admission & Assign Bed",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
             text = {
                 Column {
                     Text(
                         text = "Assign a room and bed number for ${currentRecord.patientName}. Requested accommodation: ${currentRecord.roomType} (₹${currentRecord.roomPricePerDay}/day).",
-                        style = MaterialTheme.typography.bodyMedium
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
                     OutlinedTextField(
                         value = roomNumberInput,
                         onValueChange = { roomNumberInput = it },
@@ -215,13 +233,17 @@ fun AdminAdmissionReviewScreen(
                         isError = roomNumberInput.isNotBlank() && !isRoomValid,
                         supportingText = {
                             if (roomNumberInput.isNotBlank() && !isRoomValid) {
-                                Text("Room number must be between 2 and 50 characters")
+                                Text("Room number must be between 2 and 50 characters", color = MaterialTheme.colorScheme.error)
                             } else {
                                 Text("Required. Minimum 2 characters.")
                             }
                         },
-                        shape = RoundedCornerShape(8.dp),
-                        enabled = !isProcessing
+                        shape = RoundedCornerShape(12.dp),
+                        enabled = !isProcessing,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                        )
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
@@ -230,8 +252,12 @@ fun AdminAdmissionReviewScreen(
                         modifier = Modifier.fillMaxWidth(),
                         label = { Text("Admin Remark (Optional)") },
                         placeholder = { Text("e.g. Admitted under Dr. Sharma, fasting required") },
-                        shape = RoundedCornerShape(8.dp),
-                        enabled = !isProcessing
+                        shape = RoundedCornerShape(12.dp),
+                        enabled = !isProcessing,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                        )
                     )
                 }
             },
@@ -264,9 +290,14 @@ fun AdminAdmissionReviewScreen(
                             }
                         }
                     },
-                    enabled = isRoomValid && !isProcessing
+                    enabled = isRoomValid && !isProcessing,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    )
                 ) {
-                    Text(if (isProcessing) "Saving..." else "Confirm Approval")
+                    Text(if (isProcessing) "Saving..." else "Confirm Approval", fontWeight = FontWeight.SemiBold)
                 }
             },
             dismissButton = {
@@ -274,9 +305,11 @@ fun AdminAdmissionReviewScreen(
                     onClick = { showApproveDialog = false },
                     enabled = !isProcessing
                 ) {
-                    Text("Cancel")
+                    Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-            }
+            },
+            shape = RoundedCornerShape(20.dp),
+            containerColor = MaterialTheme.colorScheme.surface
         )
     }
 
@@ -289,14 +322,22 @@ fun AdminAdmissionReviewScreen(
 
         AlertDialog(
             onDismissRequest = { if (!isProcessing) showRejectDialog = false },
-            title = { Text("Reject Admission Request") },
+            title = {
+                Text(
+                    text = "Reject Admission Request",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.error
+                )
+            },
             text = {
                 Column {
                     Text(
                         text = "Provide a clinical or administrative reason for rejecting this admission request for ${currentRecord.patientName}.",
-                        style = MaterialTheme.typography.bodyMedium
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
                     OutlinedTextField(
                         value = adminRemarkInput,
                         onValueChange = { adminRemarkInput = it },
@@ -307,13 +348,17 @@ fun AdminAdmissionReviewScreen(
                         isError = adminRemarkInput.isNotBlank() && !isRemarkValid,
                         supportingText = {
                             if (adminRemarkInput.isNotBlank() && !isRemarkValid) {
-                                Text("Rejection remark must be at least 5 characters (${trimmedRemark.length}/5)")
+                                Text("Rejection remark must be at least 5 characters (${trimmedRemark.length}/5)", color = MaterialTheme.colorScheme.error)
                             } else {
                                 Text("Mandatory. Minimum 5 characters.")
                             }
                         },
-                        shape = RoundedCornerShape(8.dp),
-                        enabled = !isProcessing
+                        shape = RoundedCornerShape(12.dp),
+                        enabled = !isProcessing,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.error,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                        )
                     )
                 }
             },
@@ -346,11 +391,13 @@ fun AdminAdmissionReviewScreen(
                         }
                     },
                     enabled = isRemarkValid && !isProcessing,
+                    shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError
                     )
                 ) {
-                    Text(if (isProcessing) "Rejecting..." else "Reject Request")
+                    Text(if (isProcessing) "Rejecting..." else "Reject Request", fontWeight = FontWeight.SemiBold)
                 }
             },
             dismissButton = {
@@ -358,9 +405,11 @@ fun AdminAdmissionReviewScreen(
                     onClick = { showRejectDialog = false },
                     enabled = !isProcessing
                 ) {
-                    Text("Cancel")
+                    Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-            }
+            },
+            shape = RoundedCornerShape(20.dp),
+            containerColor = MaterialTheme.colorScheme.surface
         )
     }
 
@@ -370,11 +419,19 @@ fun AdminAdmissionReviewScreen(
     if (showDischargeDialog && currentRecord != null) {
         AlertDialog(
             onDismissRequest = { if (!isProcessing) showDischargeDialog = false },
-            title = { Text("Mark Patient Discharged?") },
+            title = {
+                Text(
+                    text = "Mark Patient Discharged?",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
             text = {
                 Text(
-                    text = "Are you sure you want to mark patient ${currentRecord.patientName} as DISCHARGED? This will conclude inpatient accommodation in room ${currentRecord.assignedRoom ?: currentRecord.roomType} and finalize the record.",
-                    style = MaterialTheme.typography.bodyMedium
+                    text = "Are you sure you want to mark patient ${currentRecord.patientName} as DISCHARGED? This will conclude inpatient accommodation in room ${currentRecord.assignedRoom ?: currentRecord.roomType} and finalize the admission record.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             },
             confirmButton = {
@@ -404,9 +461,14 @@ fun AdminAdmissionReviewScreen(
                             }
                         }
                     },
-                    enabled = !isProcessing
+                    enabled = !isProcessing,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    )
                 ) {
-                    Text(if (isProcessing) "Discharging..." else "Confirm Discharge")
+                    Text(if (isProcessing) "Discharging..." else "Confirm Discharge", fontWeight = FontWeight.SemiBold)
                 }
             },
             dismissButton = {
@@ -414,9 +476,11 @@ fun AdminAdmissionReviewScreen(
                     onClick = { showDischargeDialog = false },
                     enabled = !isProcessing
                 ) {
-                    Text("Cancel")
+                    Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-            }
+            },
+            shape = RoundedCornerShape(20.dp),
+            containerColor = MaterialTheme.colorScheme.surface
         )
     }
 }
@@ -433,6 +497,7 @@ fun AdminAdmissionReviewContent(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+
     Scaffold(
         topBar = {
             CareTopBar(
@@ -450,7 +515,15 @@ fun AdminAdmissionReviewContent(
                         .padding(innerPadding),
                     contentAlignment = Alignment.Center
                 ) {
-                    LoadingIndicator()
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        LoadingIndicator()
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Loading admission details...",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
             is AdminAdmissionReviewUiState.Unauthenticated -> {
@@ -461,15 +534,59 @@ fun AdminAdmissionReviewContent(
                         .padding(24.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    EmptyState(
-                        icon = Icons.Default.AccountCircle,
-                        message = "Hospital Admin Sign-In Required\n\nPlease sign in with an authorized hospital administrator account to evaluate inpatient admission requests.",
-                        action = {
-                            Button(onClick = onNavigateBack) {
-                                Text("Go Back")
+                    OutlinedCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.outlinedCardColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        ),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(24.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                                modifier = Modifier.size(72.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.AccountCircle,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(40.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "Hospital Admin Sign-In Required",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Please sign in with an authorized hospital administrator account to evaluate inpatient admission requests.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(20.dp))
+                            Button(
+                                onClick = onNavigateBack,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(52.dp),
+                                shape = RoundedCornerShape(16.dp)
+                            ) {
+                                Text("Go Back", fontWeight = FontWeight.SemiBold)
                             }
                         }
-                    )
+                    }
                 }
             }
             is AdminAdmissionReviewUiState.Unauthorized -> {
@@ -480,15 +597,62 @@ fun AdminAdmissionReviewContent(
                         .padding(24.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    EmptyState(
-                        icon = Icons.Default.Block,
-                        message = "Access Restricted\n\nYou are not authorized to review this admission request. Administrators can review admissions for their designated hospital only.",
-                        action = {
-                            Button(onClick = onNavigateBack) {
-                                Text("Go Back")
+                    OutlinedCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.outlinedCardColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        ),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(24.dp),
+                                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+                                modifier = Modifier.size(72.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.Block,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(40.dp),
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "Access Restricted",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "You are not authorized to review this admission request. Administrators can review admissions for their designated hospital only.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(20.dp))
+                            Button(
+                                onClick = onNavigateBack,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(52.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary
+                                )
+                            ) {
+                                Text("Go Back", fontWeight = FontWeight.SemiBold)
                             }
                         }
-                    )
+                    }
                 }
             }
             is AdminAdmissionReviewUiState.NotFound -> {
@@ -499,15 +663,59 @@ fun AdminAdmissionReviewContent(
                         .padding(24.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    EmptyState(
-                        icon = Icons.Default.SearchOff,
-                        message = "Admission Request Not Found\n\nThe requested admission record could not be found. It may have been deleted or the ID is invalid.",
-                        action = {
-                            Button(onClick = onNavigateBack) {
-                                Text("Go Back")
+                    OutlinedCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.outlinedCardColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        ),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(24.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier.size(72.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.SearchOff,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(40.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "Admission Request Not Found",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "The requested admission record could not be found. It may have been deleted or the ID is invalid.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(20.dp))
+                            Button(
+                                onClick = onNavigateBack,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(52.dp),
+                                shape = RoundedCornerShape(16.dp)
+                            ) {
+                                Text("Go Back", fontWeight = FontWeight.SemiBold)
                             }
                         }
-                    )
+                    }
                 }
             }
             is AdminAdmissionReviewUiState.Error -> {
@@ -518,32 +726,71 @@ fun AdminAdmissionReviewContent(
                         .padding(24.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    EmptyState(
-                        icon = Icons.Default.ErrorOutline,
-                        message = "Unable to Load Admission\n\n${uiState.message}",
-                        action = {
-                            Button(onClick = onRetry) {
+                    OutlinedCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.outlinedCardColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        ),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(24.dp),
+                                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+                                modifier = Modifier.size(72.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.ErrorOutline,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(40.dp),
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "Unable to Load Admission",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = uiState.message,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(20.dp))
+                            Button(
+                                onClick = onRetry,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(52.dp),
+                                shape = RoundedCornerShape(16.dp)
+                            ) {
                                 Icon(
                                     imageVector = Icons.Default.Refresh,
                                     contentDescription = null,
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Retry")
+                                Text("Retry", fontWeight = FontWeight.SemiBold)
                             }
                         }
-                    )
+                    }
                 }
             }
             is AdminAdmissionReviewUiState.Success -> {
                 val record = uiState.admission
                 val hospital = remember(record.hospitalId) { hospitalLookup(record.hospitalId) }
-                val statusColor = when (record.status) {
-                    AdmissionStatus.PENDING -> Color(0xFFFFF3CD)
-                    AdmissionStatus.APPROVED -> Color(0xFFD1E7DD)
-                    AdmissionStatus.REJECTED -> Color(0xFFF8D7DA)
-                    AdmissionStatus.DISCHARGED -> Color(0xFFE2E3E5)
-                }
+                val statusContainer = admissionStatusContainerColor(record.status)
 
                 Column(
                     modifier = Modifier
@@ -552,14 +799,37 @@ fun AdminAdmissionReviewContent(
                         .padding(horizontal = 16.dp, vertical = 8.dp)
                         .verticalScroll(rememberScrollState())
                 ) {
-                    // Header card
-                    SectionCard {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.Top
-                        ) {
-                            Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                    // Header Hero Card
+                    OutlinedCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.outlinedCardColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        ),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                LabelChip(
+                                    text = "REF: ${record.referenceCode()}",
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                                StatusChip(
+                                    text = record.status.label,
+                                    containerColor = statusContainer
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(14.dp))
+
+                            Column(
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
                                 Text(
                                     text = record.patientName,
                                     style = MaterialTheme.typography.titleLarge,
@@ -568,91 +838,81 @@ fun AdminAdmissionReviewContent(
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = "Ref: ${record.referenceCode()} • ${hospital?.name ?: record.hospitalId}",
+                                    text = "${hospital?.name ?: record.hospitalId} • Submitted ${DateUtils.format(record.createdAtMillis)}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = "Submitted ${DateUtils.format(record.createdAtMillis)}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
                             }
-                            StatusChip(
-                                text = record.status.label,
-                                containerColor = statusColor
-                            )
-                        }
 
-                        // Assigned Room Banner (Only when assignedRoom is non-blank)
-                        if (!record.assignedRoom.isNullOrBlank()) {
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(10.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                            // Assigned Room Banner (Only when assignedRoom is non-blank)
+                            if (!record.assignedRoom.isNullOrBlank()) {
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f),
+                                    modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.MeetingRoom,
-                                        contentDescription = "Room",
-                                        tint = MaterialTheme.colorScheme.secondary,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Column {
-                                        Text(
-                                            text = "Assigned Room: ${record.assignedRoom}",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                                    Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.MeetingRoom,
+                                            contentDescription = "Room",
+                                            tint = MaterialTheme.colorScheme.secondary,
+                                            modifier = Modifier.size(20.dp)
                                         )
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Column {
+                                            Text(
+                                                text = "Assigned Bed / Room: ${record.assignedRoom}",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                                            )
+                                            Text(
+                                                text = "Bed allocation confirmed by hospital administration",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.85f)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Administrative Remarks / Rejection Reason
+                            if (!record.adminRemark.isNullOrBlank()) {
+                                Spacer(modifier = Modifier.height(10.dp))
+                                val isRejected = record.status == AdmissionStatus.REJECTED
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = if (isRejected) {
+                                        MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp)) {
                                         Text(
-                                            text = "Bed confirmed by hospital administration",
+                                            text = if (isRejected) "Rejection Reason:" else "Hospital Admin Remark:",
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.85f)
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isRejected) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                                        )
+                                        Spacer(modifier = Modifier.height(3.dp))
+                                        Text(
+                                            text = record.adminRemark!!,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurface
                                         )
                                     }
                                 }
                             }
                         }
-
-                        // Administrative Remarks / Rejection Reason
-                        if (!record.adminRemark.isNullOrBlank()) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            val isRejected = record.status == AdmissionStatus.REJECTED
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = if (isRejected) {
-                                    MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f)
-                                } else {
-                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Column(modifier = Modifier.padding(10.dp)) {
-                                    Text(
-                                        text = if (isRejected) "Rejection Reason:" else "Hospital Admin Remark:",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (isRejected) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-                                    )
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        text = record.adminRemark!!,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
-                            }
-                        }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
                     // Reason & Requested Accommodation
                     SectionCard(title = "Reason & Requested Accommodation") {
@@ -672,7 +932,7 @@ fun AdminAdmissionReviewContent(
                         DetailItemRow("Estimated Stay Cost", "₹${record.estimatedCost}")
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
                     // Patient Details & Emergency Contacts
                     SectionCard(title = "Patient Information & Contacts") {
@@ -696,8 +956,10 @@ fun AdminAdmissionReviewContent(
                             if (validPatientPhone != null) {
                                 Button(
                                     onClick = { launchDialer(context, validPatientPhone) },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(10.dp)
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(48.dp),
+                                    shape = RoundedCornerShape(12.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Call,
@@ -705,7 +967,7 @@ fun AdminAdmissionReviewContent(
                                         modifier = Modifier.size(18.dp)
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Call Patient", style = MaterialTheme.typography.labelLarge)
+                                    Text("Call Patient (${record.patientPhone})", style = MaterialTheme.typography.labelLarge)
                                 }
                             }
 
@@ -716,8 +978,11 @@ fun AdminAdmissionReviewContent(
                             if (validEmergencyPhone != null) {
                                 OutlinedButton(
                                     onClick = { launchDialer(context, validEmergencyPhone) },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(10.dp)
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(48.dp),
+                                    shape = RoundedCornerShape(12.dp),
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Call,
@@ -725,13 +990,13 @@ fun AdminAdmissionReviewContent(
                                         modifier = Modifier.size(18.dp)
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Call Emergency Contact", style = MaterialTheme.typography.labelLarge)
+                                    Text("Call Emergency Contact (${record.emergencyContactPhone})", style = MaterialTheme.typography.labelLarge)
                                 }
                             }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
                     // Clinical Background (Explicitly indicates "None reported" when empty)
                     SectionCard(title = "Clinical Background") {
@@ -749,7 +1014,7 @@ fun AdminAdmissionReviewContent(
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
                     // Insurance Details
                     SectionCard(title = "Insurance Coverage") {
@@ -767,25 +1032,45 @@ fun AdminAdmissionReviewContent(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
                     // Forwarded Medical Summary
                     SectionCard(title = "Forwarded Medical Portfolio") {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FolderShared,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Patient-consented portfolio records attached during admission request",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
                         Surface(
-                            shape = RoundedCornerShape(8.dp),
+                            shape = RoundedCornerShape(12.dp),
                             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
                                 text = record.sharedPortfolioSummary.ifBlank { "No previous medical summary forwarded." },
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.padding(12.dp),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(14.dp),
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(20.dp))
 
                     // -------------------------------------------------------
                     // Adjudication Action Buttons based on Status
@@ -798,42 +1083,62 @@ fun AdminAdmissionReviewContent(
                             ) {
                                 OutlinedButton(
                                     onClick = onRejectClick,
-                                    modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(52.dp),
+                                    shape = RoundedCornerShape(16.dp),
                                     colors = ButtonDefaults.outlinedButtonColors(
                                         contentColor = MaterialTheme.colorScheme.error
+                                    ),
+                                    border = BorderStroke(
+                                        1.dp,
+                                        MaterialTheme.colorScheme.error.copy(alpha = 0.5f)
                                     )
                                 ) {
                                     Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Reject")
+                                    Text("Reject", fontWeight = FontWeight.SemiBold)
                                 }
 
                                 Button(
                                     onClick = onApproveClick,
-                                    modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(12.dp)
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(52.dp),
+                                    shape = RoundedCornerShape(16.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.primary,
+                                        contentColor = MaterialTheme.colorScheme.onPrimary
+                                    ),
+                                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
                                 ) {
                                     Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Approve")
+                                    Text("Approve", fontWeight = FontWeight.SemiBold)
                                 }
                             }
                         }
                         AdmissionStatus.APPROVED -> {
                             Button(
                                 onClick = onDischargeClick,
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp)
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(52.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                ),
+                                elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
                             ) {
                                 Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Mark Discharged")
+                                Text("Mark Discharged", fontWeight = FontWeight.SemiBold)
                             }
                         }
                         AdmissionStatus.REJECTED -> {
                             Surface(
-                                shape = RoundedCornerShape(8.dp),
+                                shape = RoundedCornerShape(12.dp),
                                 color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
@@ -848,7 +1153,7 @@ fun AdminAdmissionReviewContent(
                         }
                         AdmissionStatus.DISCHARGED -> {
                             Surface(
-                                shape = RoundedCornerShape(8.dp),
+                                shape = RoundedCornerShape(12.dp),
                                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
@@ -880,32 +1185,22 @@ fun AdminAdmissionReviewContent(
  */
 private fun sanitizeAndValidatePhone(raw: String?): String? {
     if (raw.isNullOrBlank()) return null
-    val cleaned = raw.trim().replace(Regex("[\\s\\-().]"), "")
-    if (!cleaned.all { it.isDigit() || it == '+' }) return null
-    val plusCount = cleaned.count { it == '+' }
-    if (plusCount > 1 || (plusCount == 1 && !cleaned.startsWith("+"))) return null
-    val digitCount = cleaned.count { it.isDigit() }
-    if (digitCount < 7) return null
-    if (cleaned.startsWith("+") && !cleaned.substring(1).all { it.isDigit() }) return null
-    return cleaned
+    val stripped = raw.replace("[\\s\\-().]".toRegex(), "")
+    if (!stripped.matches("^\\+?[0-9]{7,15}$".toRegex())) return null
+    val digitsOnly = stripped.replace("+", "")
+    if (digitsOnly.length < 7) return null
+    return stripped
 }
 
-/**
- * Dispatches an implicit Intent.ACTION_DIAL intent with tel: URI.
- * Safely catches ActivityNotFoundException and other execution failures without crashing.
- */
 private fun launchDialer(context: Context, phoneNumber: String) {
     try {
-        val dialIntent = Intent(Intent.ACTION_DIAL).apply {
+        val intent = Intent(Intent.ACTION_DIAL).apply {
             data = Uri.parse("tel:$phoneNumber")
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
-        context.startActivity(dialIntent)
+        context.startActivity(intent)
     } catch (_: Exception) {
-        Toast.makeText(
-            context,
-            "Unable to launch phone dialer",
-            Toast.LENGTH_SHORT
-        ).show()
+        Toast.makeText(context, "Unable to launch phone dialer.", Toast.LENGTH_SHORT).show()
     }
 }
 
@@ -914,13 +1209,13 @@ private fun DetailItemRow(label: String, value: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .padding(vertical = 5.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.Top
     ) {
         Text(
             text = label,
-            style = MaterialTheme.typography.bodySmall,
+            style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.weight(1f)
         )
@@ -948,75 +1243,78 @@ private val previewMockHospital = Hospital(
     phone = "+91 22 2675 1000",
     rating = 4.7,
     reviewCount = 320,
-    specialties = listOf("Cardiology", "Orthopedics"),
-    facilities = listOf("24/7 ICU", "Pharmacy"),
+    specialties = listOf("Cardiology", "Neurology"),
+    facilities = listOf("ICU", "Diagnostics"),
     emergency24x7 = true,
-    roomTypes = emptyList(),
-    aboutHtml = "<p>Lilavati Hospital</p>",
-    accentColorHex = "#1E88E5"
+    roomTypes = listOf(
+        RoomType("General Ward", 2000, "Shared accommodation with 24/7 nursing support"),
+        RoomType("Semi-Private", 4500, "Two-bed sharing with partition and attached washroom"),
+        RoomType("Private Deluxe", 8500, "Individual room with attendant sofa, TV, and en-suite")
+    ),
+    aboutHtml = "Premier healthcare facility in Western Mumbai.",
+    accentColorHex = "#0D6EFD"
 )
 
-private val previewPendingAdmission = Admission(
-    id = "ADM001-PND",
-    patientId = "P001",
-    patientName = "Rahul Sharma",
+private val previewMockPendingAdmission = Admission(
+    id = "ADM-20241025-001",
+    patientId = "PAT001",
     hospitalId = "HOSP001",
-    reasonForAdmission = "Cardiac evaluation and elective stenting procedure",
-    referringDoctor = "Dr. Amit Roy",
-    preferredDateMillis = System.currentTimeMillis() + 86400000L * 2,
-    expectedStayDays = 3,
-    roomTypeName = "Deluxe Room",
-    pricePerDay = 6500,
-    estimatedCost = 19500,
-    patientAge = 42,
-    gender = "Male",
-    bloodGroup = "O+",
-    phone = "+91 98200 12345",
-    address = "402 Palm Heights, Andheri West, Mumbai",
-    emergencyContactName = "Priya Sharma",
+    patientName = "Suresh Patel",
+    patientAge = 58,
+    patientGender = "Male",
+    patientBloodGroup = "B+",
+    patientPhone = "+91 98200 12345",
+    patientAddress = "Flat 402, Sea Breeze Apts, Bandra West, Mumbai 400050",
+    emergencyContactName = "Kavita Patel (Spouse)",
     emergencyContactPhone = "+91 98200 54321",
+    reason = "Severe chest tightness and episodic shortness of breath requiring monitoring",
+    referringDoctor = "Dr. Rajesh Shah",
+    roomType = "Private Deluxe",
+    roomPricePerDay = 8500,
+    preferredDateMillis = System.currentTimeMillis() + 86400000L,
+    expectedStayDays = 4,
+    estimatedCost = 34000,
     allergies = listOf("Penicillin", "Sulfa drugs"),
-    chronicConditions = listOf("Hypertension"),
-    currentMedications = listOf("Amlodipine 5mg", "Aspirin 75mg"),
-    sharedPortfolioText = "Patient has a 5-year history of controlled hypertension. Recent ECG showed mild ST-T changes. Routine follow-up scheduled.",
-    insurance = InsuranceDetails(
+    chronicConditions = listOf("Type 2 Diabetes", "Hypertension"),
+    currentMedications = listOf("Metformin 500mg", "Amlodipine 5mg"),
+    insuranceDetails = InsuranceDetails(
         providerName = "Star Health Insurance",
-        policyNumber = "SH12345678",
-        policyHolderName = "Rahul Sharma",
-        validTillMillis = System.currentTimeMillis() + 86400000L * 300,
+        policyNumber = "SH-MED-2024-88412",
+        policyholderName = "Suresh Patel",
+        validityDateMillis = System.currentTimeMillis() + 31536000000L,
         sumInsured = 500000
     ),
+    sharedPortfolioSummary = "Diagnosed with Type 2 Diabetes (2018). Last HbA1c: 7.2%. No known adverse cardiac events prior to current presentation.",
     status = AdmissionStatus.PENDING,
-    assignedRoomNumber = null,
-    adminRemark = null,
-    createdAtMillis = System.currentTimeMillis() - 86400000L
+    createdAtMillis = System.currentTimeMillis() - 3600000L
 )
 
-private val previewApprovedAdmission = previewPendingAdmission.copy(
-    id = "ADM002-APP",
+private val previewMockApprovedAdmission = previewMockPendingAdmission.copy(
+    id = "ADM-20241025-002",
     status = AdmissionStatus.APPROVED,
-    assignedRoomNumber = "Bed 402-A",
-    adminRemark = "Admitted under Dr. Amit Roy. Pre-procedure fasting required from midnight."
+    assignedRoomNumber = "Deluxe Ward 4, Bed 412",
+    adminRemark = "Admitted under Dr. Rajesh Shah. Fasting blood work scheduled for 08:00 AM."
 )
 
-private val previewRejectedAdmission = previewPendingAdmission.copy(
-    id = "ADM003-REJ",
+private val previewMockRejectedAdmission = previewMockPendingAdmission.copy(
+    id = "ADM-20241025-003",
     status = AdmissionStatus.REJECTED,
-    assignedRoomNumber = null,
-    adminRemark = "Requested Deluxe accommodation is fully occupied for the chosen date. Please select another date or room type."
+    adminRemark = "Private Deluxe wing currently under scheduled maintenance. Advised rescheduling or choosing Semi-Private accommodation."
 )
 
-private val previewDischargedAdmission = previewApprovedAdmission.copy(
-    id = "ADM004-DIS",
-    status = AdmissionStatus.DISCHARGED
+private val previewMockDischargedAdmission = previewMockPendingAdmission.copy(
+    id = "ADM-20241025-004",
+    status = AdmissionStatus.DISCHARGED,
+    assignedRoomNumber = "Deluxe Ward 4, Bed 412",
+    adminRemark = "Discharge summary handed over. Follow-up consultation in 10 days."
 )
 
-@Preview(showBackground = true, name = "Pending Admission (Adjudication Actions)")
+@Preview(showBackground = true, name = "Pending Request")
 @Composable
 fun AdminAdmissionReviewScreenPendingPreview() {
     CareConnectTheme {
         AdminAdmissionReviewContent(
-            uiState = AdminAdmissionReviewUiState.Success(previewPendingAdmission),
+            uiState = AdminAdmissionReviewUiState.Success(previewMockPendingAdmission),
             onNavigateBack = {},
             onRetry = {},
             hospitalLookup = { previewMockHospital }
@@ -1024,12 +1322,12 @@ fun AdminAdmissionReviewScreenPendingPreview() {
     }
 }
 
-@Preview(showBackground = true, name = "Approved Admission (Discharge Action)")
+@Preview(showBackground = true, name = "Approved Request")
 @Composable
 fun AdminAdmissionReviewScreenApprovedPreview() {
     CareConnectTheme {
         AdminAdmissionReviewContent(
-            uiState = AdminAdmissionReviewUiState.Success(previewApprovedAdmission),
+            uiState = AdminAdmissionReviewUiState.Success(previewMockApprovedAdmission),
             onNavigateBack = {},
             onRetry = {},
             hospitalLookup = { previewMockHospital }
@@ -1037,12 +1335,12 @@ fun AdminAdmissionReviewScreenApprovedPreview() {
     }
 }
 
-@Preview(showBackground = true, name = "Rejected Admission")
+@Preview(showBackground = true, name = "Rejected Request")
 @Composable
 fun AdminAdmissionReviewScreenRejectedPreview() {
     CareConnectTheme {
         AdminAdmissionReviewContent(
-            uiState = AdminAdmissionReviewUiState.Success(previewRejectedAdmission),
+            uiState = AdminAdmissionReviewUiState.Success(previewMockRejectedAdmission),
             onNavigateBack = {},
             onRetry = {},
             hospitalLookup = { previewMockHospital }
@@ -1050,12 +1348,12 @@ fun AdminAdmissionReviewScreenRejectedPreview() {
     }
 }
 
-@Preview(showBackground = true, name = "Discharged Admission")
+@Preview(showBackground = true, name = "Discharged Request")
 @Composable
 fun AdminAdmissionReviewScreenDischargedPreview() {
     CareConnectTheme {
         AdminAdmissionReviewContent(
-            uiState = AdminAdmissionReviewUiState.Success(previewDischargedAdmission),
+            uiState = AdminAdmissionReviewUiState.Success(previewMockDischargedAdmission),
             onNavigateBack = {},
             onRetry = {},
             hospitalLookup = { previewMockHospital }
@@ -1063,7 +1361,7 @@ fun AdminAdmissionReviewScreenDischargedPreview() {
     }
 }
 
-@Preview(showBackground = true, name = "Unauthorized Access")
+@Preview(showBackground = true, name = "Unauthorized State")
 @Composable
 fun AdminAdmissionReviewScreenUnauthorizedPreview() {
     CareConnectTheme {
@@ -1075,7 +1373,7 @@ fun AdminAdmissionReviewScreenUnauthorizedPreview() {
     }
 }
 
-@Preview(showBackground = true, name = "Unauthenticated Session")
+@Preview(showBackground = true, name = "Unauthenticated State")
 @Composable
 fun AdminAdmissionReviewScreenUnauthenticatedPreview() {
     CareConnectTheme {
@@ -1087,7 +1385,7 @@ fun AdminAdmissionReviewScreenUnauthenticatedPreview() {
     }
 }
 
-@Preview(showBackground = true, name = "Record Not Found")
+@Preview(showBackground = true, name = "Not Found State")
 @Composable
 fun AdminAdmissionReviewScreenNotFoundPreview() {
     CareConnectTheme {
@@ -1099,8 +1397,14 @@ fun AdminAdmissionReviewScreenNotFoundPreview() {
     }
 }
 
-@Preview(showBackground = true, name = "Default Preview")
+@Preview(showBackground = true, name = "Generic Preview")
 @Composable
 fun AdminAdmissionReviewScreenPreview() {
-    AdminAdmissionReviewScreenPendingPreview()
+    CareConnectTheme {
+        AdminAdmissionReviewContent(
+            uiState = AdminAdmissionReviewUiState.Success(previewMockPendingAdmission),
+            onNavigateBack = {},
+            onRetry = {}
+        )
+    }
 }
