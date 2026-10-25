@@ -127,6 +127,9 @@ fun CareConnectApp(
                 onNavigateToMyBookings = { navController.navigate(Screen.MyBookings) },
                 onNavigateToAdmissionForm = { navController.navigate(Screen.AdmissionForm()) },
                 onNavigateToMyAdmissions = { navController.navigate(Screen.MyAdmissions) },
+                onAdmissionClick = { admissionId ->
+                    navController.navigate(Screen.AdmissionDetail(admissionId))
+                },
                 onLogout = { navController.resetTo(Screen.RoleSelection) }
             )
         }

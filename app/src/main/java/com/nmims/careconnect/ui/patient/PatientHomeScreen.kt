@@ -37,11 +37,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import android.widget.Toast
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircleOutline
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.FolderShared
 import androidx.compose.material.icons.filled.Hotel
@@ -67,7 +69,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -100,6 +104,7 @@ fun PatientHomeScreen(
     onNavigateToMyBookings: () -> Unit = {},
     onNavigateToAdmissionForm: () -> Unit = {},
     onNavigateToMyAdmissions: () -> Unit = {},
+    onAdmissionClick: (String) -> Unit = {},
     onLogout: () -> Unit
 ) {
     val context = LocalContext.current
@@ -156,6 +161,7 @@ fun PatientHomeScreen(
         onNavigateToMyBookings = onNavigateToMyBookings,
         onNavigateToAdmissionForm = onNavigateToAdmissionForm,
         onNavigateToMyAdmissions = onNavigateToMyAdmissions,
+        onAdmissionClick = onAdmissionClick,
         onLogoutClick = { showLogoutDialog = true }
     )
 
@@ -187,6 +193,7 @@ fun PatientHomeContent(
     onNavigateToAdmissionForm: () -> Unit,
     onNavigateToMyAdmissions: () -> Unit,
     onLogoutClick: () -> Unit,
+    onAdmissionClick: (String) -> Unit = {},
     hospitalLookup: (String) -> Hospital? = { HospitalRepository.getHospital(it) },
     modifier: Modifier = Modifier
 ) {
@@ -329,7 +336,7 @@ fun PatientHomeContent(
                     ActiveAdmissionCard(
                         admission = activeAdmission,
                         hospitalLookup = hospitalLookup,
-                        onClick = onNavigateToMyAdmissions
+                        onClick = { onAdmissionClick(activeAdmission.id) }
                     )
                 }
             }
@@ -348,6 +355,9 @@ fun ActiveAdmissionCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
+
     val hospitalName = remember(admission.hospitalId) {
         try {
             hospitalLookup(admission.hospitalId)?.name?.takeIf { it.isNotBlank() } ?: "Partner Hospital"
@@ -458,14 +468,37 @@ fun ActiveAdmissionCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "Ref: ${admission.referenceCode()}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
+                    Text(
+                        text = "Ref: ${admission.referenceCode()}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                    IconButton(
+                        onClick = {
+                            clipboardManager.setText(AnnotatedString(admission.referenceCode()))
+                            Toast.makeText(
+                                context,
+                                "Reference code copied to clipboard",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        },
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ContentCopy,
+                            contentDescription = "Copy Reference Code",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "View in My Admissions",
+                        text = "View Details",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.primary
@@ -643,6 +676,7 @@ fun PatientHomeDefaultPreview() {
             onNavigateToMyBookings = {},
             onNavigateToAdmissionForm = {},
             onNavigateToMyAdmissions = {},
+            onAdmissionClick = {},
             onLogoutClick = {},
             hospitalLookup = { mockHospitalForPreview }
         )
@@ -665,6 +699,7 @@ fun PatientHomePendingPreview() {
             onNavigateToMyBookings = {},
             onNavigateToAdmissionForm = {},
             onNavigateToMyAdmissions = {},
+            onAdmissionClick = {},
             onLogoutClick = {},
             hospitalLookup = { mockHospitalForPreview }
         )
@@ -687,6 +722,7 @@ fun PatientHomeApprovedPreview() {
             onNavigateToMyBookings = {},
             onNavigateToAdmissionForm = {},
             onNavigateToMyAdmissions = {},
+            onAdmissionClick = {},
             onLogoutClick = {},
             hospitalLookup = { mockHospitalForPreview }
         )
@@ -709,6 +745,7 @@ fun PatientHomeErrorPreview() {
             onNavigateToMyBookings = {},
             onNavigateToAdmissionForm = {},
             onNavigateToMyAdmissions = {},
+            onAdmissionClick = {},
             onLogoutClick = {},
             hospitalLookup = { mockHospitalForPreview }
         )
