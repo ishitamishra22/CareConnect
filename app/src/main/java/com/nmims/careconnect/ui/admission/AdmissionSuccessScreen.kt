@@ -73,6 +73,7 @@ import com.nmims.careconnect.ui.common.LoadingIndicator
 import com.nmims.careconnect.ui.common.PrimaryButton
 import com.nmims.careconnect.ui.common.SectionCard
 import com.nmims.careconnect.ui.common.StatusChip
+import com.nmims.careconnect.ui.common.admissionStatusContainerColor
 import com.nmims.careconnect.ui.theme.CareConnectTheme
 
 @Composable
@@ -230,12 +231,7 @@ fun AdmissionSuccessScreen(
                         HospitalRepository.getHospital(record.hospitalId)
                     }
 
-                    val statusColor = when (record.status) {
-                        AdmissionStatus.PENDING -> Color(0xFFFFF3CD)
-                        AdmissionStatus.APPROVED -> Color(0xFFD1E7DD)
-                        AdmissionStatus.REJECTED -> Color(0xFFF8D7DA)
-                        AdmissionStatus.DISCHARGED -> Color(0xFFE2E3E5)
-                    }
+                    val statusColor = admissionStatusContainerColor(record.status)
 
                     Column(
                         modifier = Modifier
@@ -247,14 +243,14 @@ fun AdmissionSuccessScreen(
                         // Success Confirmation Icon Banner
                         Surface(
                             shape = CircleShape,
-                            color = Color(0xFFE8F5E9),
+                            color = MaterialTheme.colorScheme.primaryContainer,
                             modifier = Modifier.size(80.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
                                     imageVector = Icons.Default.CheckCircle,
                                     contentDescription = "Success",
-                                    tint = Color(0xFF2E7D32),
+                                    tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(52.dp)
                                 )
                             }
