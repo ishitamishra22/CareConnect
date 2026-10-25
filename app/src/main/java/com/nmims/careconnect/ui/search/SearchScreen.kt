@@ -166,7 +166,7 @@ fun SearchScreen(
                         }
 
                         PrimaryButton(
-                            text = "Compare (${selectedDoctorIds.size})",
+                            text = "Compare",
                             onClick = {
                                 onCompareClick(selectedDoctorIds.toList())
                             },
