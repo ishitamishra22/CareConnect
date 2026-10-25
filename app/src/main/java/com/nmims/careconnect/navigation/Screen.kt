@@ -43,7 +43,7 @@ sealed class Screen {
     data class Compare(val doctorIds: List<String>) : Screen()
 
     // Phase 4: Automated Hospital Admission & Admin Dashboard
-    data object AdmissionForm : Screen()
+    data class AdmissionForm(val hospitalId: String? = null) : Screen()
     data class AdmissionSuccess(val admissionId: String) : Screen()
     data object MyAdmissions : Screen()
     data class AdmissionDetail(val admissionId: String) : Screen()

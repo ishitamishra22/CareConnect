@@ -125,7 +125,7 @@ fun CareConnectApp(
                 onNavigateToSearch = { navController.navigate(Screen.Search) },
                 onNavigateToBookingHub = { navController.navigate(Screen.BookingHub) },
                 onNavigateToMyBookings = { navController.navigate(Screen.MyBookings) },
-                onNavigateToAdmissionForm = { navController.navigate(Screen.AdmissionForm) },
+                onNavigateToAdmissionForm = { navController.navigate(Screen.AdmissionForm()) },
                 onNavigateToMyAdmissions = { navController.navigate(Screen.MyAdmissions) },
                 onLogout = { navController.resetTo(Screen.RoleSelection) }
             )
@@ -228,7 +228,8 @@ fun CareConnectApp(
             HospitalDetailScreen(
                 hospitalId = current.hospitalId,
                 onNavigateBack = { navController.back() },
-                onDoctorClick = { doctorId -> navController.navigate(Screen.DoctorDetail(doctorId)) }
+                onDoctorClick = { doctorId -> navController.navigate(Screen.DoctorDetail(doctorId)) },
+                onRequestAdmission = { hospitalId -> navController.navigate(Screen.AdmissionForm(hospitalId)) }
             )
         }
         is Screen.DoctorDetail -> {
@@ -296,6 +297,7 @@ fun CareConnectApp(
         }
         is Screen.AdmissionForm -> {
             com.nmims.careconnect.ui.admission.AdmissionFormScreen(
+                initialHospitalId = current.hospitalId,
                 onNavigateBack = { navController.back() },
                 onCreateProfile = { navController.navigate(Screen.EditProfile) },
                 onAdmissionSuccess = { admissionId ->

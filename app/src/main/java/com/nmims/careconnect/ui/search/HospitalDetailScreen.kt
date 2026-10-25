@@ -72,6 +72,7 @@ import com.nmims.careconnect.ui.common.CareTopBar
 import com.nmims.careconnect.ui.common.DateUtils
 import com.nmims.careconnect.ui.common.EmptyState
 import com.nmims.careconnect.ui.common.LabelChip
+import com.nmims.careconnect.ui.common.PrimaryButton
 import com.nmims.careconnect.ui.common.RatingBar
 import com.nmims.careconnect.ui.common.SectionCard
 import com.nmims.careconnect.ui.theme.CareConnectTheme
@@ -97,7 +98,8 @@ import kotlinx.coroutines.launch
 fun HospitalDetailScreen(
     hospitalId: String,
     onNavigateBack: () -> Unit = {},
-    onDoctorClick: (String) -> Unit = {}
+    onDoctorClick: (String) -> Unit = {},
+    onRequestAdmission: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -137,13 +139,31 @@ fun HospitalDetailScreen(
                 title = hospital.name,
                 onBack = onNavigateBack
             )
+        },
+        bottomBar = {
+            Surface(
+                tonalElevation = 8.dp,
+                shadowElevation = 8.dp,
+                color = MaterialTheme.colorScheme.surface
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    PrimaryButton(
+                        text = "Request Inpatient Admission",
+                        onClick = { onRequestAdmission(hospital.id) }
+                    )
+                }
+            }
         }
     ) { innerPadding ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Header Card
@@ -663,6 +683,11 @@ fun HospitalDetailScreen(
 @Composable
 fun HospitalDetailScreenPreview() {
     CareConnectTheme {
-        HospitalDetailScreen(hospitalId = "hosp_andheri")
+        HospitalDetailScreen(
+            hospitalId = "hosp_andheri",
+            onNavigateBack = {},
+            onDoctorClick = {},
+            onRequestAdmission = {}
+        )
     }
 }
