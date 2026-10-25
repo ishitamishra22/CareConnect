@@ -15,6 +15,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.nmims.careconnect.ui.theme.ThemePreferences.initialize(this)
         enableEdgeToEdge()
         setContent {
             CareConnectTheme {
