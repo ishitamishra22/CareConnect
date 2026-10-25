@@ -5,8 +5,11 @@ package com.nmims.careconnect.ui.booking
  * Displays confirmation details upon successful OPD or Lab Test booking.
  * Displays booking reference code, doctor/test details, hospital, date, time slot, and status.
  * Provides direct navigation options to My Bookings and Patient Home.
+ * Polished with clinical minimalism, theme-aware tokens, and StatusChip.
  */
 
+import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,12 +23,17 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -40,7 +48,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -58,6 +68,8 @@ import com.nmims.careconnect.ui.common.LoadingIndicator
 import com.nmims.careconnect.ui.common.PrimaryButton
 import com.nmims.careconnect.ui.common.SectionCard
 import com.nmims.careconnect.ui.common.StatusChip
+import com.nmims.careconnect.ui.patient.components.EmptyStatePanel
+import com.nmims.careconnect.ui.patient.components.PatientHeroCard
 import com.nmims.careconnect.ui.theme.CareConnectTheme
 
 @Composable
@@ -67,6 +79,7 @@ fun BookingSuccessScreen(
     onNavigateToHome: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
     val repository = remember(context) { BookingRepositoryProvider.get(context) }
 
     var booking by remember { mutableStateOf<Booking?>(null) }
@@ -107,39 +120,14 @@ fun BookingSuccessScreen(
                     LoadingIndicator(modifier = Modifier.align(Alignment.Center))
                 }
                 isError || booking == null -> {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.ErrorOutline,
-                            contentDescription = "Error",
-                            modifier = Modifier.size(64.dp),
-                            tint = MaterialTheme.colorScheme.error
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = "Booking Details Unavailable",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "We could not find the requested booking record.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(modifier = Modifier.height(24.dp))
-                        PrimaryButton(
-                            text = "Back to Home",
-                            onClick = onNavigateToHome
-                        )
-                    }
+                    EmptyStatePanel(
+                        icon = Icons.Default.ErrorOutline,
+                        title = "Booking Details Unavailable",
+                        message = "We could not find the requested booking record.",
+                        actionText = "Back to Home",
+                        onActionClick = onNavigateToHome,
+                        modifier = Modifier.align(Alignment.Center)
+                    )
                 }
                 else -> {
                     val currentBooking = booking!!
@@ -153,6 +141,12 @@ fun BookingSuccessScreen(
                         currentBooking.labTestId?.let { LabTestRepository.getTest(it) }
                     }
 
+                    val statusColor = when (currentBooking.status) {
+                        BookingStatus.CONFIRMED -> MaterialTheme.colorScheme.primaryContainer
+                        BookingStatus.COMPLETED -> MaterialTheme.colorScheme.tertiaryContainer
+                        BookingStatus.CANCELLED -> MaterialTheme.colorScheme.errorContainer
+                    }
+
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
@@ -162,15 +156,15 @@ fun BookingSuccessScreen(
                     ) {
                         Surface(
                             shape = CircleShape,
-                            color = Color(0xFFE8F5E9),
+                            color = MaterialTheme.colorScheme.primaryContainer,
                             modifier = Modifier.size(80.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
                                     imageVector = Icons.Default.CheckCircle,
                                     contentDescription = "Success",
-                                    tint = Color(0xFF2E7D32),
-                                    modifier = Modifier.size(52.dp)
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(48.dp)
                                 )
                             }
                         }
@@ -184,10 +178,10 @@ fun BookingSuccessScreen(
                             color = MaterialTheme.colorScheme.onSurface
                         )
 
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
 
                         Text(
-                            text = "Your healthcare appointment has been scheduled.",
+                            text = "Your healthcare appointment has been secured and dispatched to the clinician.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center
@@ -196,40 +190,66 @@ fun BookingSuccessScreen(
                         Spacer(modifier = Modifier.height(20.dp))
 
                         // Reference Code Highlight Card
-                        SectionCard {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(18.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surface
+                            ),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
+                        ) {
                             Column(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(20.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 Text(
                                     text = "BOOKING REFERENCE CODE",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.SemiBold,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.primary
                                 )
                                 Spacer(modifier = Modifier.height(6.dp))
-                                Text(
-                                    text = currentBooking.referenceCode(),
-                                    style = MaterialTheme.typography.headlineMedium,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Text(
+                                        text = currentBooking.referenceCode(),
+                                        style = MaterialTheme.typography.headlineMedium,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    IconButton(
+                                        onClick = {
+                                            clipboardManager.setText(AnnotatedString(currentBooking.referenceCode()))
+                                            Toast.makeText(context, "Reference code copied", Toast.LENGTH_SHORT).show()
+                                        },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.ContentCopy,
+                                            contentDescription = "Copy code",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
                                 Spacer(modifier = Modifier.height(8.dp))
                                 StatusChip(
                                     text = currentBooking.status.label,
-                                    containerColor = when (currentBooking.status) {
-                                        BookingStatus.CONFIRMED -> Color(0xFFE8F5E9)
-                                        BookingStatus.COMPLETED -> Color(0xFFE3F2FD)
-                                        BookingStatus.CANCELLED -> Color(0xFFFFEBEE)
-                                    }
+                                    containerColor = statusColor
                                 )
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(18.dp))
 
                         // Details Section Card
-                        SectionCard(title = "Appointment Details") {
+                        SectionCard(title = "Appointment Summary") {
                             InfoRow(
                                 label = "Service Type",
                                 value = currentBooking.type.label
@@ -303,11 +323,12 @@ fun BookingSuccessScreen(
                             onClick = onNavigateToHome,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(50.dp),
-                            shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
+                                .height(52.dp),
+                            shape = RoundedCornerShape(16.dp),
                             colors = ButtonDefaults.outlinedButtonColors(
                                 contentColor = MaterialTheme.colorScheme.primary
-                            )
+                            ),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
                         ) {
                             Text(
                                 text = "Back to Home",
@@ -316,7 +337,7 @@ fun BookingSuccessScreen(
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(24.dp))
                     }
                 }
             }

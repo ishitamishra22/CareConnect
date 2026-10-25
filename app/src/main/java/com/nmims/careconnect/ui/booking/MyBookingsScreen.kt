@@ -4,6 +4,7 @@ package com.nmims.careconnect.ui.booking
  * MyBookingsScreen:
  * Displays a list of the patient's OPD and Lab Test bookings divided into Upcoming and Past tabs.
  * Allows viewing booking details and cancelling eligible upcoming bookings with a confirmation dialog.
+ * Redesigned with BookingSummaryCard, PatientHeroCard, and EmptyStatePanel.
  */
 
 import androidx.compose.foundation.clickable
@@ -58,12 +59,14 @@ import com.nmims.careconnect.data.repository.BookingRepositoryProvider
 import com.nmims.careconnect.data.repository.HospitalRepository
 import com.nmims.careconnect.data.repository.LabTestRepository
 import com.nmims.careconnect.session.AppSession
+import com.nmims.careconnect.ui.booking.components.BookingSummaryCard
 import com.nmims.careconnect.ui.common.CareTopBar
 import com.nmims.careconnect.ui.common.ConfirmDialog
 import com.nmims.careconnect.ui.common.DateUtils
-import com.nmims.careconnect.ui.common.EmptyState
 import com.nmims.careconnect.ui.common.LoadingIndicator
 import com.nmims.careconnect.ui.common.StatusChip
+import com.nmims.careconnect.ui.patient.components.EmptyStatePanel
+import com.nmims.careconnect.ui.patient.components.PatientHeroCard
 import com.nmims.careconnect.ui.theme.CareConnectTheme
 import kotlinx.coroutines.launch
 
@@ -166,15 +169,17 @@ fun MyBookingsScreen(
                         LoadingIndicator(modifier = Modifier.align(Alignment.Center))
                     }
                     selectedTab == 0 && upcomingBookings.isEmpty() -> {
-                        EmptyState(
+                        EmptyStatePanel(
                             icon = Icons.Default.CalendarMonth,
-                            message = "No upcoming bookings found. You can schedule doctor visits or lab tests anytime."
+                            title = "No Upcoming Bookings",
+                            message = "You have no active doctor appointments or diagnostic tests scheduled. Browse specialists or book laboratory tests anytime."
                         )
                     }
                     selectedTab == 1 && pastBookings.isEmpty() -> {
-                        EmptyState(
+                        EmptyStatePanel(
                             icon = Icons.Default.History,
-                            message = "No past bookings or consultations recorded yet."
+                            title = "No Past Records",
+                            message = "No past bookings, completed consultations, or cancellation records found."
                         )
                     }
                     else -> {
@@ -184,13 +189,42 @@ fun MyBookingsScreen(
                             contentPadding = PaddingValues(16.dp),
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
+                            item {
+                                PatientHeroCard(
+                                    title = if (selectedTab == 0) "${upcomingBookings.size} Active Healthcare Bookings" else "${pastBookings.size} Recorded Consultation Entries",
+                                    description = if (selectedTab == 0) "Show your reference code at hospital check-in for expedited admission and queue priority." else "Consultation history, laboratory reports, and prescription advice from previous visits.",
+                                    badgeText = if (selectedTab == 0) "Upcoming Visits" else "Booking History"
+                                )
+                            }
+
                             items(displayList, key = { it.id }) { booking ->
-                                BookingCard(
+                                val hospital = remember(booking.hospitalId) {
+                                    HospitalRepository.getHospital(booking.hospitalId)
+                                }
+                                val doctor = remember(booking.doctorId) {
+                                    booking.doctorId?.let { HospitalRepository.getDoctor(it) }
+                                }
+                                val labTest = remember(booking.labTestId) {
+                                    booking.labTestId?.let { LabTestRepository.getTest(it) }
+                                }
+
+                                val targetName = when (booking.type) {
+                                    BookingType.OPD_APPOINTMENT -> doctor?.let { "${it.name} (${it.specialty})" } ?: "Doctor Appointment"
+                                    BookingType.LAB_TEST -> labTest?.name ?: booking.reason
+                                }
+                                val hospitalName = hospital?.name ?: "Partner Hospital"
+
+                                val canCancel = booking.status == BookingStatus.CONFIRMED &&
+                                        booking.dateMillis >= todayStart
+
+                                BookingSummaryCard(
                                     booking = booking,
+                                    targetName = targetName,
+                                    hospitalName = hospitalName,
                                     onClick = { onBookingClick(booking.id) },
-                                    onCancelClick = {
-                                        bookingToCancel = booking
-                                    }
+                                    onCancelClick = if (canCancel) {
+                                        { bookingToCancel = booking }
+                                    } else null
                                 )
                             }
                         }
@@ -202,7 +236,7 @@ fun MyBookingsScreen(
         if (bookingToCancel != null) {
             ConfirmDialog(
                 title = "Cancel Booking",
-                message = "Are you sure you want to cancel booking ${bookingToCancel?.referenceCode()}? This cannot be undone.",
+                message = "Are you sure you want to cancel booking Ref: ${bookingToCancel?.referenceCode()}? This cannot be undone.",
                 confirmText = if (isCancelling) "Cancelling..." else "Cancel Booking",
                 dismissText = "Keep Booking",
                 onConfirm = {
@@ -228,125 +262,9 @@ fun MyBookingsScreen(
     }
 }
 
-@Composable
-private fun BookingCard(
-    booking: Booking,
-    onClick: () -> Unit,
-    onCancelClick: () -> Unit
-) {
-    val hospital = remember(booking.hospitalId) {
-        HospitalRepository.getHospital(booking.hospitalId)
-    }
-    val doctor = remember(booking.doctorId) {
-        booking.doctorId?.let { HospitalRepository.getDoctor(it) }
-    }
-    val labTest = remember(booking.labTestId) {
-        booking.labTestId?.let { LabTestRepository.getTest(it) }
-    }
-
-    val serviceTitle = when (booking.type) {
-        BookingType.OPD_APPOINTMENT -> doctor?.let { "Dr. ${it.name} (${it.specialty})" } ?: "Doctor Appointment"
-        BookingType.LAB_TEST -> labTest?.name ?: booking.reason
-    }
-
-    val statusColor = when (booking.status) {
-        BookingStatus.CONFIRMED -> Color(0xFFE8F5E9)
-        BookingStatus.COMPLETED -> Color(0xFFE3F2FD)
-        BookingStatus.CANCELLED -> Color(0xFFFFEBEE)
-    }
-
-    val canCancel = booking.status == BookingStatus.CONFIRMED &&
-            booking.dateMillis >= DateUtils.todayStartMillis()
-
-    OutlinedCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.outlinedCardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        border = androidx.compose.foundation.BorderStroke(
-            1.dp,
-            MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
-        )
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "REF: ${booking.referenceCode()}",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                StatusChip(
-                    text = booking.status.label,
-                    containerColor = statusColor
-                )
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            Text(
-                text = serviceTitle,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Text(
-                text = hospital?.name ?: booking.hospitalId,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "${DateUtils.formatWithDay(booking.dateMillis)} • ${booking.timeSlot}",
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-
-                if (canCancel) {
-                    OutlinedButton(
-                        onClick = onCancelClick,
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.error
-                        ),
-                        border = androidx.compose.foundation.BorderStroke(
-                            1.dp,
-                            MaterialTheme.colorScheme.error.copy(alpha = 0.5f)
-                        )
-                    ) {
-                        Text(
-                            text = "Cancel",
-                            style = MaterialTheme.typography.labelMedium
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
 @Preview(showBackground = true)
 @Composable
-private fun MyBookingsScreenPreview() {
+fun MyBookingsScreenPreview() {
     CareConnectTheme {
         MyBookingsScreen()
     }

@@ -6,7 +6,7 @@ package com.nmims.careconnect.ui.booking
  * - Option 1: Doctor Appointment booking (browse specialists or pick doctor)
  * - Option 2: Diagnostic Lab Test & Scan booking
  * - Option 3: Quick access to My Bookings
- * Matches CareConnectTheme and uses SectionCard and CareTopBar.
+ * Matches CareConnectTheme and uses SectionCard, CareTopBar, and PatientHeroCard.
  */
 
 import androidx.compose.foundation.clickable
@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Biotech
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircleOutline
 import androidx.compose.material.icons.filled.MedicalServices
+import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -45,6 +46,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.nmims.careconnect.ui.common.CareTopBar
+import com.nmims.careconnect.ui.patient.components.PatientActionTile
+import com.nmims.careconnect.ui.patient.components.PatientHeroCard
+import com.nmims.careconnect.ui.patient.components.PatientSectionHeader
 import com.nmims.careconnect.ui.theme.CareConnectTheme
 
 @Composable
@@ -67,119 +71,56 @@ fun BookingHubScreen(
                 .fillMaxSize()
                 .padding(innerPadding),
             contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             item {
-                Text(
-                    text = "Schedule Healthcare",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Book OPD doctor consultations with hospital specialists or schedule laboratory diagnostics & scans.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                PatientHeroCard(
+                    title = "Healthcare Consultation & Diagnostics",
+                    description = "Schedule in-person specialist consultations across partner hospital networks or arrange pathology and radiology tests.",
+                    badgeText = "Clinical Booking Hub"
                 )
             }
 
             item {
-                BookingHubCard(
+                PatientSectionHeader(
+                    title = "Available Services",
+                    subtitle = "Select consultation or diagnostic service"
+                )
+            }
+
+            item {
+                PatientActionTile(
                     title = "Doctor Consultation",
-                    subtitle = "Book an in-person appointment with verified specialists across partner hospitals",
+                    subtitle = "Book in-person appointment with verified hospital specialists",
                     icon = Icons.Default.MedicalServices,
                     onClick = onNavigateToDoctorSearch
                 )
             }
 
             item {
-                BookingHubCard(
+                PatientActionTile(
                     title = "Lab Tests & Scans",
-                    subtitle = "Book diagnostic pathology tests (CBC, Lipid, HbA1c, Thyroid) and radiological scans",
+                    subtitle = "Schedule blood tests (CBC, Lipid, HbA1c), pathology & scans",
                     icon = Icons.Default.Biotech,
                     onClick = onNavigateToLabBooking
                 )
             }
 
             item {
-                BookingHubCard(
-                    title = "My Bookings",
-                    subtitle = "Review active tokens, upcoming schedules, consult notes and past visit records",
+                PatientSectionHeader(
+                    title = "Booking Records",
+                    subtitle = "Track active tokens & review history"
+                )
+            }
+
+            item {
+                PatientActionTile(
+                    title = "My Bookings & Receipts",
+                    subtitle = "Review active tokens, schedules, doctor notes & past visits",
                     icon = Icons.Default.CheckCircleOutline,
                     onClick = onNavigateToMyBookings
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun BookingHubCard(
-    title: String,
-    subtitle: String,
-    icon: ImageVector,
-    onClick: () -> Unit
-) {
-    OutlinedCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.outlinedCardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        border = androidx.compose.foundation.BorderStroke(
-            1.dp,
-            MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(18.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.primaryContainer,
-                modifier = Modifier.size(52.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = title,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(28.dp)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Spacer(modifier = Modifier.width(8.dp))
-
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.outline,
-                modifier = Modifier.size(20.dp)
-            )
         }
     }
 }
