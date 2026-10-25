@@ -1,6 +1,7 @@
 package com.nmims.careconnect.ui.common
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,6 +40,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.nmims.careconnect.data.model.AdmissionStatus
+import com.nmims.careconnect.data.model.BookingStatus
 
 /**
  * Standard top app bar for CareConnect screens.
@@ -165,12 +168,20 @@ fun EmptyState(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            modifier = Modifier.size(64.dp),
-            tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.8f)
-        )
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+            modifier = Modifier.size(72.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(36.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
         Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = message,
@@ -349,6 +360,27 @@ fun StatusChip(
 }
 
 /**
+ * Theme-adaptive container color for booking status indicators.
+ */
+@Composable
+fun bookingStatusContainerColor(status: BookingStatus): Color = when (status) {
+    BookingStatus.CONFIRMED -> MaterialTheme.colorScheme.primaryContainer
+    BookingStatus.COMPLETED -> MaterialTheme.colorScheme.tertiaryContainer
+    BookingStatus.CANCELLED -> MaterialTheme.colorScheme.errorContainer
+}
+
+/**
+ * Theme-adaptive container color for admission status indicators.
+ */
+@Composable
+fun admissionStatusContainerColor(status: AdmissionStatus): Color = when (status) {
+    AdmissionStatus.APPROVED -> MaterialTheme.colorScheme.primaryContainer
+    AdmissionStatus.PENDING -> MaterialTheme.colorScheme.tertiaryContainer
+    AdmissionStatus.REJECTED -> MaterialTheme.colorScheme.errorContainer
+    AdmissionStatus.DISCHARGED -> MaterialTheme.colorScheme.secondaryContainer
+}
+
+/**
  * Compact statistic card used on dashboard screens.
  * Uses 16 dp rounded corners, subtle outline, and 8 dp spacing system.
  */
@@ -357,18 +389,37 @@ fun StatCard(
     label: String,
     value: String,
     icon: ImageVector,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isSelected: Boolean = false,
+    onClick: (() -> Unit)? = null
 ) {
+    val clickableModifier = if (onClick != null) {
+        modifier.clickable(onClick = onClick)
+    } else {
+        modifier
+    }
+    val borderColor = if (isSelected) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+    }
+    val borderWidth = if (isSelected) 2.dp else 1.dp
+    val containerColor = if (isSelected) {
+        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)
+    } else {
+        MaterialTheme.colorScheme.surface
+    }
+
     OutlinedCard(
-        modifier = modifier,
+        modifier = clickableModifier,
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.outlinedCardColors(
-            containerColor = MaterialTheme.colorScheme.surface
+            containerColor = containerColor
         ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+        border = BorderStroke(borderWidth, borderColor)
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(14.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Surface(
@@ -396,7 +447,9 @@ fun StatCard(
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                textAlign = TextAlign.Center
             )
         }
     }
