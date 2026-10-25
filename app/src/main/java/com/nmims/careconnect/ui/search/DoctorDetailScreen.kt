@@ -88,6 +88,9 @@ import com.nmims.careconnect.data.model.UserRole
 import com.nmims.careconnect.session.AppSession
 import com.nmims.careconnect.ui.common.RatingInput
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.navigationBarsPadding
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -130,6 +133,7 @@ fun DoctorDetailScreen(
     var isSubmittingReview by remember { mutableStateOf(false) }
 
     Scaffold(
+        contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             CareTopBar(
                 title = "Doctor Details",
@@ -145,6 +149,7 @@ fun DoctorDetailScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .navigationBarsPadding()
                         .padding(16.dp)
                 ) {
                     PrimaryButton(
