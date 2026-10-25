@@ -17,6 +17,9 @@ package com.nmims.careconnect.ui.admin
  * - Extracted stateless AdminAdmissionReviewContent with isolated Compose Previews
  */
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -35,6 +38,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
@@ -428,6 +432,7 @@ fun AdminAdmissionReviewContent(
     hospitalLookup: (String) -> Hospital? = { HospitalRepository.getHospital(it) },
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     Scaffold(
         topBar = {
             CareTopBar(
@@ -677,6 +682,53 @@ fun AdminAdmissionReviewContent(
                         DetailItemRow("Primary Phone", record.patientPhone)
                         DetailItemRow("Address", record.patientAddress)
                         DetailItemRow("Emergency Contact", "${record.emergencyContactName} (${record.emergencyContactPhone})")
+
+                        val validPatientPhone = remember(record.patientPhone) {
+                            sanitizeAndValidatePhone(record.patientPhone)
+                        }
+                        val validEmergencyPhone = remember(record.emergencyContactPhone) {
+                            sanitizeAndValidatePhone(record.emergencyContactPhone)
+                        }
+
+                        if (validPatientPhone != null || validEmergencyPhone != null) {
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            if (validPatientPhone != null) {
+                                Button(
+                                    onClick = { launchDialer(context, validPatientPhone) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Call,
+                                        contentDescription = "Call Patient",
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Call Patient", style = MaterialTheme.typography.labelLarge)
+                                }
+                            }
+
+                            if (validPatientPhone != null && validEmergencyPhone != null) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                            }
+
+                            if (validEmergencyPhone != null) {
+                                OutlinedButton(
+                                    onClick = { launchDialer(context, validEmergencyPhone) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Call,
+                                        contentDescription = "Call Emergency Contact",
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Call Emergency Contact", style = MaterialTheme.typography.labelLarge)
+                                }
+                            }
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -815,6 +867,45 @@ fun AdminAdmissionReviewContent(
                 }
             }
         }
+    }
+}
+
+/**
+ * Sanitizes and validates a phone number string for telephony actions.
+ * - Strips common formatting separators (spaces, hyphens, parentheses, periods).
+ * - Requires at least 7 numeric digits.
+ * - Rejects malformed values: multiple '+' characters, or '+' appearing anywhere other than index 0.
+ * - Rejects non-numeric characters.
+ * - Returns sanitized dialable string (e.g. "+919820012345" or "02226751000") or null if invalid.
+ */
+private fun sanitizeAndValidatePhone(raw: String?): String? {
+    if (raw.isNullOrBlank()) return null
+    val cleaned = raw.trim().replace(Regex("[\\s\\-().]"), "")
+    if (!cleaned.all { it.isDigit() || it == '+' }) return null
+    val plusCount = cleaned.count { it == '+' }
+    if (plusCount > 1 || (plusCount == 1 && !cleaned.startsWith("+"))) return null
+    val digitCount = cleaned.count { it.isDigit() }
+    if (digitCount < 7) return null
+    if (cleaned.startsWith("+") && !cleaned.substring(1).all { it.isDigit() }) return null
+    return cleaned
+}
+
+/**
+ * Dispatches an implicit Intent.ACTION_DIAL intent with tel: URI.
+ * Safely catches ActivityNotFoundException and other execution failures without crashing.
+ */
+private fun launchDialer(context: Context, phoneNumber: String) {
+    try {
+        val dialIntent = Intent(Intent.ACTION_DIAL).apply {
+            data = Uri.parse("tel:$phoneNumber")
+        }
+        context.startActivity(dialIntent)
+    } catch (_: Exception) {
+        Toast.makeText(
+            context,
+            "Unable to launch phone dialer",
+            Toast.LENGTH_SHORT
+        ).show()
     }
 }
 
