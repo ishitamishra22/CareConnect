@@ -5,10 +5,13 @@ import com.google.firebase.Timestamp
 import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
+import com.google.firebase.auth.UserProfileChangeRequest
 import com.google.firebase.firestore.FirebaseFirestore
 import com.nmims.careconnect.data.auth.AuthError
 import com.nmims.careconnect.data.auth.AuthState
+import com.nmims.careconnect.data.auth.AuthValidators
 import com.nmims.careconnect.data.firebase.FirebaseProvider
+import com.nmims.careconnect.data.model.PatientProfile
 import com.nmims.careconnect.data.model.UserProfile
 import com.nmims.careconnect.data.model.UserRole
 import com.nmims.careconnect.session.AppSession
@@ -28,11 +31,14 @@ import kotlinx.coroutines.withContext
  *
  * Implements the contract:
  * - signInWithEmail(email, password, expectedRole)
+ * - signUpPatient(name, email, phone, pass)
  * - signOut()
  * - sendPasswordReset(email)
  * - reauthenticate(password)
  * - changePassword(oldPassword, newPassword)
  * - loadProfile(uid)
+ * - sendEmailVerification()
+ * - checkEmailVerification()
  */
 class AuthRepository(
     private val auth: FirebaseAuth = FirebaseProvider.auth,
@@ -55,6 +61,13 @@ class AuthRepository(
                 }
             }
         }
+    }
+
+    val currentUser: FirebaseUser? get() = auth.currentUser
+    val currentUserEmail: String? get() = auth.currentUser?.email
+
+    fun isCurrentUserEmailVerified(): Boolean {
+        return auth.currentUser?.isEmailVerified ?: false
     }
 
     /**
@@ -132,6 +145,123 @@ class AuthRepository(
         pass: String,
         expectedRole: UserRole? = null
     ): Result<UserProfile> = signInWithEmail(email, pass, expectedRole)
+
+    /**
+     * Registers a new Patient account via Firebase Email/Password Auth, initializes their Firestore
+     * profile under `users/{uid}` with role=PATIENT, and sends an email verification link.
+     * Never assigns privileged roles (ADMIN, DOCTOR, HOSPITAL).
+     */
+    suspend fun signUpPatient(
+        name: String,
+        email: String,
+        phone: String,
+        pass: String
+    ): Result<UserProfile> = withContext(Dispatchers.IO) {
+        _authState.value = AuthState.Loading
+        try {
+            val trimmedName = name.trim()
+            val trimmedEmail = email.trim()
+            val formattedPhone = AuthValidators.formatIndianMobile(phone.trim())
+
+            val authResult = auth.createUserWithEmailAndPassword(trimmedEmail, pass).await()
+            val firebaseUser = authResult.user
+                ?: throw IllegalStateException("Firebase user was null after registration")
+
+            // Update user display name in Firebase Auth
+            try {
+                val profileUpdates = UserProfileChangeRequest.Builder()
+                    .setDisplayName(trimmedName)
+                    .build()
+                firebaseUser.updateProfile(profileUpdates).await()
+            } catch (e: Exception) {
+                Log.w(TAG, "Non-critical: could not set displayName on FirebaseUser: ${e.message}")
+            }
+
+            // Trigger email verification link
+            try {
+                firebaseUser.sendEmailVerification().await()
+            } catch (e: Exception) {
+                Log.w(TAG, "Non-critical: could not send initial email verification: ${e.message}")
+            }
+
+            // Create users/{uid} profile (Strictly UserRole.PATIENT)
+            val userProfile = UserProfile(
+                uid = firebaseUser.uid,
+                role = UserRole.PATIENT,
+                email = trimmedEmail,
+                phone = formattedPhone,
+                displayName = trimmedName,
+                active = true,
+                linkedDoctorId = null,
+                linkedHospitalId = null,
+                createdAt = Timestamp.now(),
+                createdBy = "self",
+                lastLoginAt = Timestamp.now()
+            )
+
+            db.collection(USERS_COLLECTION).document(firebaseUser.uid)
+                .set(userProfile.toMap())
+                .await()
+
+            // Initialize patient demographic document in patients/{uid}
+            try {
+                val patientProfile = PatientProfile(
+                    name = trimmedName,
+                    age = 0,
+                    gender = "",
+                    bloodGroup = "",
+                    phone = formattedPhone,
+                    email = trimmedEmail,
+                    address = "",
+                    emergencyContactName = "",
+                    emergencyContactPhone = ""
+                )
+                db.collection("patients").document(firebaseUser.uid)
+                    .set(patientProfile.toMap())
+                    .await()
+            } catch (e: Exception) {
+                Log.w(TAG, "Non-critical: could not initialize patient demographic document: ${e.message}")
+            }
+
+            syncToAppSession(userProfile)
+            _authState.value = AuthState.SignedIn(userProfile)
+            Result.success(userProfile)
+        } catch (e: Throwable) {
+            val error = AuthError.fromException(e)
+            _authState.value = AuthState.SignedOut
+            Result.failure(Exception(error.message, e))
+        }
+    }
+
+    /**
+     * Sends an email verification link to the current authenticated user.
+     */
+    suspend fun sendEmailVerification(): Result<Unit> = withContext(Dispatchers.IO) {
+        val user = auth.currentUser
+            ?: return@withContext Result.failure(Exception("No authenticated user"))
+        try {
+            user.sendEmailVerification().await()
+            Result.success(Unit)
+        } catch (e: Throwable) {
+            val error = AuthError.fromException(e)
+            Result.failure(Exception(error.message, e))
+        }
+    }
+
+    /**
+     * Reloads current user from Firebase Auth to inspect whether email verification has completed.
+     */
+    suspend fun checkEmailVerification(): Result<Boolean> = withContext(Dispatchers.IO) {
+        val user = auth.currentUser
+            ?: return@withContext Result.failure(Exception("No authenticated user"))
+        try {
+            user.reload().await()
+            Result.success(user.isEmailVerified)
+        } catch (e: Throwable) {
+            val error = AuthError.fromException(e)
+            Result.failure(Exception(error.message, e))
+        }
+    }
 
     /**
      * Loads a user profile by UID directly from Firestore.
