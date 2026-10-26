@@ -135,14 +135,32 @@ fun CareConnectApp(
                     UserRole.HOSPITAL -> { { navController.navigate(Screen.HospitalStaffSignup) } }
                     else -> null
                 },
+                onNavigateToSignUp = if (current.role == UserRole.PATIENT) {
+                    { navController.navigate(Screen.PatientSignUp) }
+                } else null,
                 onBack = { navController.back() }
+            )
+        }
+        is Screen.PatientSignUp -> {
+            com.nmims.careconnect.ui.auth.PatientSignUpScreen(
+                onSignUpSuccess = {
+                    navController.resetTo(Screen.PatientHome)
+                    navController.navigate(Screen.EmailVerification)
+                },
+                onNavigateToLogin = {
+                    navController.resetTo(Screen.Login(UserRole.PATIENT))
+                },
+                onBack = { navController.back() },
+                authRepository = authRepository
             )
         }
         is Screen.DoctorSignup -> {
             DoctorSignupScreen(
                 onSignupSubmitted = { email ->
                     navController.resetTo(Screen.RoleSelection)
-                    navController.navigate(Screen.ApprovalPending(email = email, role = UserRole.DOCTOR))
+                    navController.navigate(
+                        Screen.ApprovalPending(email = email, role = UserRole.DOCTOR)
+                    )
                 },
                 onNavigateToLogin = { navController.back() },
                 onBack = { navController.back() },
@@ -153,7 +171,9 @@ fun CareConnectApp(
             HospitalStaffSignupScreen(
                 onSignupSubmitted = { email ->
                     navController.resetTo(Screen.RoleSelection)
-                    navController.navigate(Screen.ApprovalPending(email = email, role = UserRole.HOSPITAL))
+                    navController.navigate(
+                        Screen.ApprovalPending(email = email, role = UserRole.HOSPITAL)
+                    )
                 },
                 onNavigateToLogin = { navController.back() },
                 onBack = { navController.back() },
@@ -162,7 +182,9 @@ fun CareConnectApp(
         }
         is Screen.ApprovalPending -> {
             ApprovalPendingScreen(
-                title = if (current.role == UserRole.DOCTOR) "Doctor Verification Pending" else "Hospital Staff Verification Pending",
+                title = if (current.role == UserRole.DOCTOR)
+                    "Doctor Verification Pending"
+                else "Hospital Staff Verification Pending",
                 message = if (current.role == UserRole.DOCTOR) {
                     "Your doctor application has been submitted and is currently pending verification of credentials and approval by a System Administrator."
                 } else {
@@ -171,6 +193,27 @@ fun CareConnectApp(
                 email = current.email,
                 onBackToLogin = { navController.resetTo(Screen.RoleSelection) }
             )
+        }
+        is Screen.EmailVerification -> {
+            AuthGate(
+                authRepository = authRepository,
+                requiredRoles = setOf(UserRole.PATIENT),
+                onNavigateToLogin = { navController.resetTo(Screen.RoleSelection) }
+            ) {
+                com.nmims.careconnect.ui.auth.EmailVerificationScreen(
+                    onVerificationSuccess = {
+                        navController.resetTo(Screen.PatientHome)
+                    },
+                    onContinueToDashboard = {
+                        navController.resetTo(Screen.PatientHome)
+                    },
+                    onSignOut = {
+                        authRepository.signOut()
+                        navController.resetTo(Screen.RoleSelection)
+                    },
+                    authRepository = authRepository
+                )
+            }
         }
         is Screen.PatientHome -> {
             AuthGate(
@@ -188,10 +231,14 @@ fun CareConnectApp(
                     onAdmissionClick = { admissionId ->
                         navController.navigate(Screen.AdmissionDetail(admissionId))
                     },
+                    onNavigateToEmailVerification = {
+                        navController.navigate(Screen.EmailVerification)
+                    },
                     onLogout = {
                         authRepository.signOut()
                         navController.resetTo(Screen.RoleSelection)
-                    }
+                    },
+                    authRepository = authRepository
                 )
             }
         }
