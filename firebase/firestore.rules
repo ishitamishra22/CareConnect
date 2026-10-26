@@ -43,22 +43,33 @@ service cloud.firestore {
       // Read: Users can read their own profile; admins can read all profiles
       allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
 
-      // Create: Users can only self-create their profile under their own UID,
-      // and CANNOT assign themselves ADMIN, DOCTOR, or HOSPITAL roles.
-      // Self-creation is restricted strictly to the PATIENT role.
-      // Admin creation of staff profiles is reserved for future admin flows.
-      allow create: if isAuthenticated() && request.auth.uid == userId && (
-        request.resource.data.role == 'PATIENT' &&
-        request.resource.data.active == true &&
-        (!('linkedDoctorId' in request.resource.data) || request.resource.data.linkedDoctorId == null) &&
-        (!('linkedHospitalId' in request.resource.data) || request.resource.data.linkedHospitalId == null)
+      // Create:
+      // 1. Authenticated Admin can provision DOCTOR or HOSPITAL accounts.
+      //    Admin can NEVER create another ADMIN account through client rules.
+      // 2. Or, a self-registered user may only create a PATIENT role profile under their own UID.
+      allow create: if isAuthenticated() && (
+        (isAdmin() && (request.resource.data.role == 'DOCTOR' || request.resource.data.role == 'HOSPITAL')) ||
+        (
+          request.auth.uid == userId &&
+          request.resource.data.role == 'PATIENT' &&
+          request.resource.data.active == true &&
+          (!('linkedDoctorId' in request.resource.data) || request.resource.data.linkedDoctorId == null) &&
+          (!('linkedHospitalId' in request.resource.data) || request.resource.data.linkedHospitalId == null)
+        )
       );
 
-      // Update: Users can only update their own non-security profile fields
-      // (cannot change role, active status, linkedDoctorId, or linkedHospitalId).
-      // Only Admins can modify roles or link hospitals/doctors.
+      // Update:
+      // 1. Admin can update non-Admin profiles (displayName, active, linkedDoctorId, linkedHospitalId)
+      //    Admins CANNOT change roles, cannot modify their own active status, and cannot modify other Admin accounts.
+      // 2. Normal user can only update their own non-security profile fields
+      //    (cannot change role, active status, linkedDoctorId, or linkedHospitalId).
       allow update: if isAuthenticated() && (
-        isAdmin() || (
+        (
+          isAdmin() &&
+          resource.data.role != 'ADMIN' &&
+          request.resource.data.role == resource.data.role
+        ) ||
+        (
           request.auth.uid == userId &&
           request.resource.data.role == resource.data.role &&
           request.resource.data.active == resource.data.active &&
@@ -67,8 +78,18 @@ service cloud.firestore {
         )
       );
 
-      // Delete: Strictly reserved for system administrator
-      allow delete: if isAdmin();
+      // Delete: Strictly disallowed via client SDK
+      allow delete: if false;
+    }
+
+    // =========================================================================
+    // SECTION A-1: Administrator Audit Logs
+    // =========================================================================
+    match /adminAuditLogs/{logId} {
+      // Create-only for Admins. No client update or delete permitted.
+      allow read: if isAdmin();
+      allow create: if isAdmin() && request.resource.data.adminUid == request.auth.uid;
+      allow update, delete: if false;
     }
 
     // =========================================================================
@@ -126,7 +147,7 @@ service cloud.firestore {
     // =========================================================================
     match /hospitals/{hospitalId} {
       allow read: if true; // Public directory for hospital search
-      allow write: if isHospitalAdminOf(hospitalId);
+      allow write: if isAdmin() || isHospitalAdminOf(hospitalId);
     }
 
     match /doctors/{doctorId} {

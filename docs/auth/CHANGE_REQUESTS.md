@@ -42,3 +42,18 @@ This document records architectural clarifications, migrations, and compatibilit
   - `UserProfile` fields aligned to the contract: `uid`, `role`, `email`, `phone`, `displayName`, `active`, `linkedDoctorId`, `linkedHospitalId`, `createdAt`, `createdBy`, `lastLoginAt`.
   - Backward compatibility getters (`doctorId`, `hospitalId`, `phoneNumber`, `isApproved`) are provided to maintain compatibility with existing legacy screens.
   - `AuthRepository` provides the agreed methods: `signInWithEmail`, `signOut`, `sendPasswordReset`, `reauthenticate`, `changePassword`, and `loadProfile`.
+
+---
+
+## 5. Part 2 — System Administrator Architecture & Security Lockdown
+- **Context**: Part 2 requires full System Administrator portal capabilities while maintaining zero-trust boundaries, medical privacy, and preventing self-privilege modification.
+- **Decision & Resolution**:
+  - **Inactivity Timeout**: 15-minute inactivity watchdog implemented in `SystemAdminDashboard`.
+  - **Non-Disturbing Staff Provisioning**: `AdminRepository.provisionStaffAccount` uses an isolated secondary `FirebaseApp` instance (`FirebaseApp.initializeApp(context, options, name)`) to provision DOCTOR and HOSPITAL accounts. This guarantees the currently active Administrator session is never signed out or replaced.
+  - **Zero Credential Exposure**: Temporary passwords are generated in memory and never displayed, stored, or logged. Accounts receive a secure password reset link upon creation.
+  - **Safety Guards**:
+    - Admins cannot deactivate their own account or modify another Administrator's account.
+    - Admins cannot alter account roles or delete user profiles via the client UI.
+  - **Audit Logging**: All administrative operations (status changes, profile updates, password resets, staff provisioning) write immutable audit logs to `adminAuditLogs/{logId}`.
+  - **Medical Privacy**: `isAdmin()` is strictly barred from patient medical records (`records`), clinical documents (`documents`), admissions, and bookings.
+

@@ -5,6 +5,7 @@ package com.nmims.careconnect.data.firebase
  */
 object Collections {
     const val USERS = "users"
+    const val ADMIN_AUDIT_LOGS = "adminAuditLogs"
     const val PATIENTS = "patients"
     const val RECORDS = "records"
     const val DOCUMENTS = "documents"

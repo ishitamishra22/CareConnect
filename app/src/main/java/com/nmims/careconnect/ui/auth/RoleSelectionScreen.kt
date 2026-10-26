@@ -70,7 +70,8 @@ import com.nmims.careconnect.ui.theme.ThemeMode
 @Composable
 fun RoleSelectionScreen(
     onRoleSelected: (UserRole) -> Unit,
-    onAboutClick: () -> Unit
+    onAboutClick: () -> Unit,
+    onSystemAdminClick: () -> Unit = {}
 ) {
     val currentThemeMode = LocalThemeMode.current
     val setThemeMode = LocalSetThemeMode.current
@@ -199,6 +200,25 @@ fun RoleSelectionScreen(
                     text = "About the App & Project Team",
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            // System Admin Link
+            TextButton(
+                onClick = onSystemAdminClick,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(
+                    imageVector = Icons.Default.AdminPanelSettings,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.outline
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "System Administrator Portal",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.outline
                 )
             }
 

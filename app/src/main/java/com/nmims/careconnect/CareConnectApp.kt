@@ -109,6 +109,9 @@ fun CareConnectApp(
                 },
                 onAboutClick = {
                     navController.navigate(Screen.About)
+                },
+                onSystemAdminClick = {
+                    navController.navigate(Screen.SystemAdminLogin)
                 }
             )
         }
@@ -120,7 +123,8 @@ fun CareConnectApp(
                     when (current.role) {
                         UserRole.PATIENT -> navController.resetTo(Screen.PatientHome)
                         UserRole.DOCTOR -> navController.resetTo(Screen.DoctorHome)
-                        UserRole.HOSPITAL, UserRole.ADMIN -> navController.resetTo(Screen.AdminHome)
+                        UserRole.HOSPITAL -> navController.resetTo(Screen.AdminHome)
+                        UserRole.ADMIN -> navController.resetTo(Screen.SystemAdminDashboard)
                     }
                 },
                 onBack = { navController.back() }
@@ -200,6 +204,62 @@ fun CareConnectApp(
                     onAdmissionClick = { admissionId ->
                         navController.navigate(Screen.AdminAdmissionReview(admissionId))
                     }
+                )
+            }
+        }
+        is Screen.SystemAdminLogin -> {
+            com.nmims.careconnect.ui.admin.SystemAdminLoginScreen(
+                onLoginSuccess = { navController.resetTo(Screen.SystemAdminDashboard) },
+                onBack = { navController.back() },
+                authRepository = authRepository
+            )
+        }
+        is Screen.SystemAdminDashboard -> {
+            AuthGate(
+                authRepository = authRepository,
+                requiredRoles = setOf(UserRole.ADMIN),
+                onNavigateToLogin = { navController.resetTo(Screen.RoleSelection) }
+            ) {
+                com.nmims.careconnect.ui.admin.SystemAdminDashboard(
+                    onNavigateToUserManagement = { navController.navigate(Screen.UserManagement) },
+                    onNavigateToProvisionStaff = { navController.navigate(Screen.ProvisionStaff) },
+                    onSignOut = { navController.resetTo(Screen.RoleSelection) },
+                    authRepository = authRepository
+                )
+            }
+        }
+        is Screen.UserManagement -> {
+            AuthGate(
+                authRepository = authRepository,
+                requiredRoles = setOf(UserRole.ADMIN),
+                onNavigateToLogin = { navController.resetTo(Screen.RoleSelection) }
+            ) {
+                com.nmims.careconnect.ui.admin.UserManagementScreen(
+                    onNavigateBack = { navController.back() },
+                    onUserClick = { uid -> navController.navigate(Screen.UserDetail(uid)) }
+                )
+            }
+        }
+        is Screen.UserDetail -> {
+            AuthGate(
+                authRepository = authRepository,
+                requiredRoles = setOf(UserRole.ADMIN),
+                onNavigateToLogin = { navController.resetTo(Screen.RoleSelection) }
+            ) {
+                com.nmims.careconnect.ui.admin.UserDetailScreen(
+                    userId = current.userId,
+                    onNavigateBack = { navController.back() }
+                )
+            }
+        }
+        is Screen.ProvisionStaff -> {
+            AuthGate(
+                authRepository = authRepository,
+                requiredRoles = setOf(UserRole.ADMIN),
+                onNavigateToLogin = { navController.resetTo(Screen.RoleSelection) }
+            ) {
+                com.nmims.careconnect.ui.admin.ProvisionStaffScreen(
+                    onNavigateBack = { navController.back() }
                 )
             }
         }
