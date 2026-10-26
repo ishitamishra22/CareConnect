@@ -17,7 +17,9 @@ service cloud.firestore {
     }
 
     function hasRole(role) {
-      return isAuthenticated() && getUserData().role == role;
+      return isAuthenticated() &&
+        getUserData().role == role &&
+        getUserData().active == true;
     }
 
     function isAdmin() {
@@ -40,45 +42,56 @@ service cloud.firestore {
     // SECTION A: Shared Authentication Core & User Profiles
     // =========================================================================
     match /users/{userId} {
-      // Read: Users can read their own profile; admins can read all profiles
-      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow read: if isAuthenticated() &&
+        (request.auth.uid == userId || isAdmin());
 
-      // Create:
-      // 1. Authenticated Admin can provision DOCTOR or HOSPITAL accounts.
-      //    Admin can NEVER create another ADMIN account through client rules.
-      // 2. Or, a self-registered user may only create a PATIENT role profile under their own UID.
       allow create: if isAuthenticated() && (
-        (isAdmin() && (request.resource.data.role == 'DOCTOR' || request.resource.data.role == 'HOSPITAL')) ||
+        (
+          isAdmin() &&
+          request.resource.data.role in ['DOCTOR', 'HOSPITAL'] &&
+          request.resource.data.uid == userId
+        ) ||
         (
           request.auth.uid == userId &&
-          request.resource.data.role == 'PATIENT' &&
-          request.resource.data.active == true &&
-          (!('linkedDoctorId' in request.resource.data) || request.resource.data.linkedDoctorId == null) &&
-          (!('linkedHospitalId' in request.resource.data) || request.resource.data.linkedHospitalId == null)
+          request.resource.data.uid == userId &&
+          request.resource.data.email == request.auth.token.email &&
+          request.resource.data.linkedDoctorId == null &&
+          request.resource.data.linkedHospitalId == null &&
+          request.resource.data.doctorId == null &&
+          request.resource.data.hospitalId == null &&
+          request.resource.data.active == request.resource.data.isApproved &&
+          (
+            (
+              request.resource.data.role == 'PATIENT' &&
+              request.resource.data.active == true
+            ) ||
+            (
+              request.resource.data.role in ['DOCTOR', 'HOSPITAL'] &&
+              request.resource.data.active == false &&
+              request.resource.data.approvalStatus == 'PENDING' &&
+              request.resource.data.createdBy == 'self_registration'
+            )
+          )
         )
       );
 
-      // Update:
-      // 1. Admin can update non-Admin profiles (displayName, active, linkedDoctorId, linkedHospitalId)
-      //    Admins CANNOT change roles, cannot modify their own active status, and cannot modify other Admin accounts.
-      // 2. Normal user can only update their own non-security profile fields
-      //    (cannot change role, active status, linkedDoctorId, or linkedHospitalId).
       allow update: if isAuthenticated() && (
         (
           isAdmin() &&
           resource.data.role != 'ADMIN' &&
-          request.resource.data.role == resource.data.role
+          request.resource.data.role == resource.data.role &&
+          request.resource.data.uid == resource.data.uid
         ) ||
         (
           request.auth.uid == userId &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['displayName', 'phone', 'phoneNumber', 'lastLoginAt']) &&
           request.resource.data.role == resource.data.role &&
           request.resource.data.active == resource.data.active &&
-          request.resource.data.linkedDoctorId == resource.data.linkedDoctorId &&
-          request.resource.data.linkedHospitalId == resource.data.linkedHospitalId
+          request.resource.data.isApproved == resource.data.isApproved
         )
       );
 
-      // Delete: Strictly disallowed via client SDK
       allow delete: if false;
     }
 
@@ -96,34 +109,46 @@ service cloud.firestore {
     // SECTION B (Temporary): Patients, Records, Documents, Bookings & Admissions
     // =========================================================================
     match /patients/{patientId} {
-      // Patient profile root: patient owner, doctor, or hospital admin
-      allow read, write: if isAuthenticated() && (request.auth.uid == patientId || isDoctor() || isHospitalAdmin());
+      // Only the patient can access their own profile.
+      allow read, write: if isOwner(patientId);
 
-      // Confidential Medical Records: Strictly patient owner and treating doctors.
-      // System Admins are strictly forbidden from viewing confidential clinical records.
       match /records/{recordId} {
-        allow read: if isAuthenticated() && (request.auth.uid == patientId || isDoctor());
-        allow write: if isAuthenticated() && (request.auth.uid == patientId || isDoctor());
+        // Only the patient can access their medical records.
+        allow read, write: if isOwner(patientId);
       }
 
-      // Confidential Medical Documents: Strictly patient owner and treating doctors.
-      // System Admins are strictly forbidden from viewing confidential medical documents.
       match /documents/{docId} {
-        allow read: if isAuthenticated() && (request.auth.uid == patientId || isDoctor());
-        allow write: if isAuthenticated() && (request.auth.uid == patientId || isDoctor());
+        // Only the patient can access their medical documents.
+        allow read, write: if isOwner(patientId);
       }
     }
 
     match /bookings/{bookingId} {
       allow read: if isAuthenticated() && (
         request.auth.uid == resource.data.patientId ||
-        request.auth.uid == resource.data.doctorId ||
+        (
+          isDoctor() &&
+          getUserData().linkedDoctorId == resource.data.doctorId
+        ) ||
         isHospitalAdminOf(resource.data.hospitalId)
       );
-      allow create: if isAuthenticated();
-      allow update: if isAuthenticated() && (
-        request.auth.uid == resource.data.patientId ||
-        request.auth.uid == resource.data.doctorId ||
+      allow create: if hasRole('PATIENT') &&
+    request.resource.data.patientId == request.auth.uid;
+      allow update: if isAuthenticated() &&
+        request.resource.data.patientId == resource.data.patientId &&
+        request.resource.data.hospitalId == resource.data.hospitalId &&
+        request.resource.data.doctorId == resource.data.doctorId && (
+        (
+          hasRole('PATIENT') &&
+          request.auth.uid == resource.data.patientId &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status']) &&
+          request.resource.data.status == 'CANCELLED'
+        ) ||
+        (
+          isDoctor() &&
+          getUserData().linkedDoctorId == resource.data.doctorId
+        ) ||
         isHospitalAdminOf(resource.data.hospitalId)
       );
       allow delete: if isAdmin();
@@ -134,9 +159,11 @@ service cloud.firestore {
         request.auth.uid == resource.data.patientId ||
         isHospitalAdminOf(resource.data.hospitalId)
       );
-      allow create: if isAuthenticated();
-      allow update: if isAuthenticated() && (
-        request.auth.uid == resource.data.patientId ||
+      allow create: if hasRole('PATIENT') &&
+    request.resource.data.patientId == request.auth.uid;
+      allow update: if isAuthenticated() &&
+        request.resource.data.patientId == resource.data.patientId &&
+        request.resource.data.hospitalId == resource.data.hospitalId && (
         isHospitalAdminOf(resource.data.hospitalId)
       );
       allow delete: if isAdmin();
@@ -152,7 +179,11 @@ service cloud.firestore {
 
     match /doctors/{doctorId} {
       allow read: if true; // Public directory for doctor search
-      allow write: if isAuthenticated() && (isAdmin() || isDoctor() || isHospitalAdmin());
+      allow write: if isAdmin() ||
+        (isDoctor() && getUserData().linkedDoctorId == doctorId) ||
+        (isHospitalAdmin() &&
+          getUserData().linkedHospitalId == resource.data.hospitalId &&
+          request.resource.data.hospitalId == resource.data.hospitalId);
     }
 
     match /reviews/{reviewId} {
@@ -162,7 +193,8 @@ service cloud.firestore {
     }
 
     match /slotLocks/{lockId} {
-      allow read, write: if isAuthenticated();
+      // Reserved for future server-validated slot locking.
+      allow read, write: if false;
     }
   }
 }
