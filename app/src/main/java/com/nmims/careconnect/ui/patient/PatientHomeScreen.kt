@@ -36,6 +36,22 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.MarkEmailUnread
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import com.nmims.careconnect.data.auth.AuthValidators
+import com.nmims.careconnect.data.repository.AuthRepository
+import kotlinx.coroutines.launch
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircleOutline
 import androidx.compose.material.icons.filled.ContentCopy
@@ -114,9 +130,12 @@ fun PatientHomeScreen(
     onNavigateToAdmissionForm: () -> Unit = {},
     onNavigateToMyAdmissions: () -> Unit = {},
     onAdmissionClick: (String) -> Unit = {},
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    onNavigateToEmailVerification: (() -> Unit)? = null,
+    authRepository: AuthRepository = AuthRepository.getInstance()
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val admissionRepo = remember(context) { AdmissionRepositoryProvider.get(context) }
     val bookingRepo = remember(context) { BookingRepositoryProvider.get(context) }
     val patientId = AppSession.currentPatientId
@@ -127,6 +146,17 @@ fun PatientHomeScreen(
     var isStreamError by remember { mutableStateOf(false) }
     var retryTrigger by remember { mutableIntStateOf(0) }
     var showLogoutDialog by remember { mutableStateOf(false) }
+    var showChangePasswordDialog by remember { mutableStateOf(false) }
+    var isEmailVerified by remember { mutableStateOf(authRepository.isCurrentUserEmailVerified()) }
+
+    var oldPassword by remember { mutableStateOf("") }
+    var newPassword by remember { mutableStateOf("") }
+    var confirmNewPassword by remember { mutableStateOf("") }
+    var oldPasswordVisible by remember { mutableStateOf(false) }
+    var newPasswordVisible by remember { mutableStateOf(false) }
+    var confirmNewPasswordVisible by remember { mutableStateOf(false) }
+    var changePasswordLoading by remember { mutableStateOf(false) }
+    var changePasswordError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(patientId, retryTrigger) {
         if (patientId.isBlank()) {
@@ -189,8 +219,188 @@ fun PatientHomeScreen(
         onNavigateToAdmissionForm = onNavigateToAdmissionForm,
         onNavigateToMyAdmissions = onNavigateToMyAdmissions,
         onAdmissionClick = onAdmissionClick,
-        onLogoutClick = { showLogoutDialog = true }
+        onLogoutClick = { showLogoutDialog = true },
+        onChangePasswordClick = { showChangePasswordDialog = true },
+        isEmailVerified = isEmailVerified,
+        onNavigateToEmailVerification = onNavigateToEmailVerification
     )
+
+    if (showChangePasswordDialog) {
+        val oldPassVal = AuthValidators.validatePassword(oldPassword)
+        val newPassVal = AuthValidators.validatePassword(newPassword)
+        val confirmPassVal = AuthValidators.validateConfirmPassword(newPassword, confirmNewPassword)
+
+        AlertDialog(
+            onDismissRequest = {
+                if (!changePasswordLoading) {
+                    showChangePasswordDialog = false
+                    changePasswordError = null
+                }
+            },
+            title = {
+                Text(
+                    text = "Change Password",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "Enter your current password and choose a new secure password.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    if (changePasswordError != null) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.errorContainer,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = changePasswordError.orEmpty(),
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(10.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                    }
+
+                    OutlinedTextField(
+                        value = oldPassword,
+                        onValueChange = {
+                            oldPassword = it
+                            changePasswordError = null
+                        },
+                        label = { Text("Current Password") },
+                        visualTransformation = if (oldPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { oldPasswordVisible = !oldPasswordVisible }) {
+                                Icon(
+                                    imageVector = if (oldPasswordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                    contentDescription = null
+                                )
+                            }
+                        },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        enabled = !changePasswordLoading
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedTextField(
+                        value = newPassword,
+                        onValueChange = {
+                            newPassword = it
+                            changePasswordError = null
+                        },
+                        label = { Text("New Password (min 6 chars)") },
+                        visualTransformation = if (newPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { newPasswordVisible = !newPasswordVisible }) {
+                                Icon(
+                                    imageVector = if (newPasswordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                    contentDescription = null
+                                )
+                            }
+                        },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        enabled = !changePasswordLoading
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedTextField(
+                        value = confirmNewPassword,
+                        onValueChange = {
+                            confirmNewPassword = it
+                            changePasswordError = null
+                        },
+                        label = { Text("Confirm New Password") },
+                        visualTransformation = if (confirmNewPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { confirmNewPasswordVisible = !confirmNewPasswordVisible }) {
+                                Icon(
+                                    imageVector = if (confirmNewPasswordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                    contentDescription = null
+                                )
+                            }
+                        },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        enabled = !changePasswordLoading
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (!oldPassVal.isValid) {
+                            changePasswordError = "Please enter your current password"
+                            return@Button
+                        }
+                        if (!newPassVal.isValid) {
+                            changePasswordError = newPassVal.errorMessage ?: "New password must be at least 6 characters"
+                            return@Button
+                        }
+                        if (!confirmPassVal.isValid) {
+                            changePasswordError = confirmPassVal.errorMessage ?: "Passwords do not match"
+                            return@Button
+                        }
+
+                        changePasswordLoading = true
+                        changePasswordError = null
+                        coroutineScope.launch {
+                            val res = authRepository.changePassword(oldPassword, newPassword)
+                            changePasswordLoading = false
+                            res.fold(
+                                onSuccess = {
+                                    Toast.makeText(context, "Password updated successfully!", Toast.LENGTH_SHORT).show()
+                                    showChangePasswordDialog = false
+                                    oldPassword = ""
+                                    newPassword = ""
+                                    confirmNewPassword = ""
+                                },
+                                onFailure = { err ->
+                                    changePasswordError = err.message ?: "Failed to update password."
+                                }
+                            )
+                        }
+                    },
+                    enabled = !changePasswordLoading
+                ) {
+                    if (changePasswordLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text("Update Password")
+                    }
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = {
+                        showChangePasswordDialog = false
+                        changePasswordError = null
+                    },
+                    enabled = !changePasswordLoading
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 
     if (showLogoutDialog) {
         ConfirmDialog(
@@ -220,6 +430,9 @@ fun PatientHomeContent(
     onNavigateToAdmissionForm: () -> Unit,
     onNavigateToMyAdmissions: () -> Unit,
     onLogoutClick: () -> Unit,
+    onChangePasswordClick: () -> Unit = {},
+    isEmailVerified: Boolean = true,
+    onNavigateToEmailVerification: (() -> Unit)? = null,
     upcomingBookings: List<Booking> = emptyList(),
     onAdmissionClick: (String) -> Unit = {},
     hospitalLookup: (String) -> Hospital? = { HospitalRepository.getHospital(it) },

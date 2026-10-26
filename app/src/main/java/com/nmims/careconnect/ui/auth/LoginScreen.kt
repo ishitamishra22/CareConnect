@@ -1,17 +1,7 @@
 package com.nmims.careconnect.ui.auth
 
-/*
- * LoginScreen:
- * Shared onboarding/login composable configured per selected UserRole.
- * - For PATIENT and HOSPITAL_ADMIN: Collects full name with student-friendly validation.
- * - For DOCTOR: Displays searchable/selectable doctor identity picker from the catalogue,
- *   populating AppSession.currentDoctorId and AppSession.currentHospitalId upon selection.
- * Clears and resets session properly and preserves existing Material 3 styling.
- */
-
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,142 +20,130 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AdminPanelSettings
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.Badge
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.LocalHospital
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.nmims.careconnect.data.model.Doctor
-import com.nmims.careconnect.data.model.Hospital
+import com.nmims.careconnect.data.auth.AuthValidators
 import com.nmims.careconnect.data.model.UserRole
-import com.nmims.careconnect.data.repository.HospitalRepository
-import com.nmims.careconnect.session.AppSession
+import com.nmims.careconnect.data.repository.AuthRepository
 import com.nmims.careconnect.ui.common.CareTopBar
 import com.nmims.careconnect.ui.common.PrimaryButton
-import com.nmims.careconnect.ui.common.SectionCard
 import com.nmims.careconnect.ui.theme.CareConnectTheme
 import com.nmims.careconnect.ui.theme.LocalElevatedSurface
+import kotlinx.coroutines.launch
 
+/**
+ * Shared credential-based authentication screen configured per selected UserRole.
+ * Supports email/password sign-in, password reset dialog, and navigation to Patient registration.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginScreen(
     role: UserRole,
     onLoginSuccess: () -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onNavigateToSignup: (() -> Unit)? = null,
+    onNavigateToSignUp: (() -> Unit)? = null,
+    authRepository: AuthRepository = AuthRepository.getInstance()
 ) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
-    var fullName by rememberSaveable { mutableStateOf("") }
+
+    var email by rememberSaveable { mutableStateOf("") }
+    var password by rememberSaveable { mutableStateOf("") }
+    var passwordVisible by rememberSaveable { mutableStateOf(false) }
+
     var touched by rememberSaveable { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(false) }
+    var generalError by remember { mutableStateOf<String?>(null) }
 
-    // Doctor selection state
-    val allDoctors = remember { HospitalRepository.getDoctors() }
-    var selectedDoctor by remember { mutableStateOf<Doctor?>(null) }
-    var doctorDropdownExpanded by remember { mutableStateOf(false) }
+    // Forgot password dialog states
+    var showForgotPasswordDialog by remember { mutableStateOf(false) }
+    var resetEmail by rememberSaveable { mutableStateOf("") }
+    var resetLoading by remember { mutableStateOf(false) }
+    var resetSuccessMessage by remember { mutableStateOf<String?>(null) }
+    var resetErrorMessage by remember { mutableStateOf<String?>(null) }
 
-    // Hospital Admin selection state
-    val allHospitals = remember { HospitalRepository.getHospitals() }
-    var selectedHospital by remember { mutableStateOf<Hospital?>(allHospitals.firstOrNull()) }
-    var hospitalDropdownExpanded by remember { mutableStateOf(false) }
-
-    // Validation rules:
-    // For PATIENT: not blank, letters & spaces only, min 3 chars
-    // For DOCTOR: doctor selected from catalogue
-    // For HOSPITAL_ADMIN: name valid and hospital selected
-    val trimmed = fullName.trim()
-    val isLettersAndSpaces = trimmed.all { it.isLetter() || it.isWhitespace() }
-    val isNameValid = trimmed.length >= 3 && isLettersAndSpaces
-    val isValid = when (role) {
-        UserRole.DOCTOR -> selectedDoctor != null
-        UserRole.HOSPITAL_ADMIN -> isNameValid && selectedHospital != null
-        UserRole.PATIENT -> isNameValid
-    }
-
-    val errorMessage = when {
-        role == UserRole.DOCTOR -> {
-            if (touched && selectedDoctor == null) "Please select your doctor identity" else null
-        }
-        role == UserRole.HOSPITAL_ADMIN && touched && selectedHospital == null -> {
-            "Please select a hospital to administer"
-        }
-        !touched -> null
-        trimmed.isBlank() -> "Full name is required"
-        trimmed.length < 3 -> "Name must be at least 3 characters long"
-        !isLettersAndSpaces -> "Only letters and spaces are allowed"
-        else -> null
-    }
+    val emailValidation = AuthValidators.validateEmail(email)
+    val passwordValidation = AuthValidators.validatePassword(password)
+    val isFormValid = emailValidation.isValid && passwordValidation.isValid
 
     val roleIcon = when (role) {
         UserRole.PATIENT -> Icons.Default.Person
         UserRole.DOCTOR -> Icons.Default.MedicalServices
-        UserRole.HOSPITAL_ADMIN -> Icons.Default.AdminPanelSettings
+        UserRole.HOSPITAL, UserRole.ADMIN -> Icons.Default.AdminPanelSettings
     }
 
     val roleSubtitle = when (role) {
-        UserRole.PATIENT -> "Enter your name to access your medical portfolio and bookings"
-        UserRole.DOCTOR -> "Select your verified doctor profile from the hospital directory"
-        UserRole.HOSPITAL_ADMIN -> "Select your hospital and enter admin name to access dashboard"
+        UserRole.PATIENT -> "Sign in with your registered email and password to access medical records and bookings"
+        UserRole.DOCTOR -> "Sign in with your verified clinical credentials to access your doctor dashboard"
+        UserRole.HOSPITAL, UserRole.ADMIN -> "Sign in with your authorized administrator credentials to manage hospital operations"
     }
 
-    fun handleContinue() {
+    fun handleSignInSubmit() {
         touched = true
-        if (role == UserRole.DOCTOR) {
-            val doc = selectedDoctor ?: return
-            AppSession.currentRole = UserRole.DOCTOR
-            AppSession.currentUserName = doc.name
-            AppSession.currentDoctorId = doc.id
-            AppSession.currentHospitalId = doc.hospitalId
-            focusManager.clearFocus()
-            onLoginSuccess()
-        } else if (role == UserRole.HOSPITAL_ADMIN) {
-            val hosp = selectedHospital ?: return
-            if (isNameValid) {
-                AppSession.currentRole = UserRole.HOSPITAL_ADMIN
-                AppSession.currentUserName = trimmed
-                AppSession.currentHospitalId = hosp.id
-                focusManager.clearFocus()
-                onLoginSuccess()
-            }
-        } else if (isValid) {
-            AppSession.currentRole = role
-            AppSession.currentUserName = trimmed
-            if (role == UserRole.PATIENT) {
-                AppSession.currentPatientId = trimmed.lowercase().replace(Regex("\\s+"), "_")
-            }
-            focusManager.clearFocus()
-            onLoginSuccess()
+        generalError = null
+        if (!isFormValid || isLoading) return
+
+        focusManager.clearFocus()
+        isLoading = true
+
+        coroutineScope.launch {
+            val result = authRepository.signInWithEmail(
+                email = email.trim(),
+                pass = password,
+                expectedRole = role
+            )
+
+            isLoading = false
+            result.fold(
+                onSuccess = {
+                    Toast.makeText(context, "Signed in successfully!", Toast.LENGTH_SHORT).show()
+                    onLoginSuccess()
+                },
+                onFailure = { err ->
+                    generalError = err.message ?: "Authentication failed. Please verify your credentials."
+                }
+            )
         }
     }
 
@@ -184,12 +162,11 @@ fun LoginScreen(
                 .padding(innerPadding)
                 .padding(horizontal = 24.dp)
                 .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
-            // Role Badge with Elevated Surface
+            // Role Badge Surface
             Surface(
                 shape = RoundedCornerShape(22.dp),
                 color = LocalElevatedSurface.current,
@@ -206,23 +183,24 @@ fun LoginScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             Text(
                 text = "Welcome, ${role.label}",
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
             Text(
                 text = roleSubtitle,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 8.dp)
+                modifier = Modifier.padding(horizontal = 12.dp)
             )
 
             Spacer(modifier = Modifier.height(28.dp))
@@ -234,314 +212,151 @@ fun LoginScreen(
                 colors = CardDefaults.outlinedCardColors(
                     containerColor = MaterialTheme.colorScheme.surface
                 ),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
-                    if (role == UserRole.DOCTOR) {
-                        // Doctor Identity Picker
-                        Text(
-                            text = "Doctor Identity",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Choose your verified credential from the roster",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
 
-                        Box(modifier = Modifier.fillMaxWidth()) {
-                            OutlinedTextField(
-                                value = selectedDoctor?.let { "Dr. ${it.name} (${it.specialty})" } ?: "",
-                                onValueChange = {},
-                                readOnly = true,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        touched = true
-                                        doctorDropdownExpanded = true
-                                    },
-                                label = { Text("Select Doctor Profile") },
-                                placeholder = { Text("Tap to choose your doctor profile") },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.MedicalServices,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                },
-                                trailingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.ArrowDropDown,
-                                        contentDescription = "Dropdown"
-                                    )
-                                },
-                                isError = errorMessage != null,
-                                supportingText = {
-                                    if (errorMessage != null) {
-                                        Text(
-                                            text = errorMessage,
-                                            color = MaterialTheme.colorScheme.error
-                                        )
-                                    } else {
-                                        Text("Select your identity from the catalogue")
-                                    }
-                                },
-                                shape = RoundedCornerShape(14.dp),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                    unfocusedBorderColor = MaterialTheme.colorScheme.outline
-                                ),
-                                enabled = true
-                            )
-
-                            // Overlay invisible click catcher to ensure tap opens dropdown reliably
-                            Surface(
-                                modifier = Modifier
-                                    .matchParentSize()
-                                    .padding(bottom = 20.dp)
-                                    .clickable {
-                                        touched = true
-                                        doctorDropdownExpanded = true
-                                    },
-                                color = androidx.compose.ui.graphics.Color.Transparent
-                            ) {}
-
-                            DropdownMenu(
-                                expanded = doctorDropdownExpanded,
-                                onDismissRequest = { doctorDropdownExpanded = false },
-                                modifier = Modifier.fillMaxWidth(0.85f)
-                            ) {
-                                allDoctors.forEach { doctor ->
-                                    val hospital = HospitalRepository.getHospital(doctor.hospitalId)
-                                    val isSelected = selectedDoctor?.id == doctor.id
-                                    DropdownMenuItem(
-                                        text = {
-                                            Column(modifier = Modifier.padding(vertical = 4.dp)) {
-                                                Row(
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                                    verticalAlignment = Alignment.CenterVertically
-                                                ) {
-                                                    Text(
-                                                        text = "Dr. ${doctor.name}",
-                                                        style = MaterialTheme.typography.bodyMedium,
-                                                        fontWeight = FontWeight.Bold
-                                                    )
-                                                    if (isSelected) {
-                                                        Icon(
-                                                            imageVector = Icons.Default.Check,
-                                                            contentDescription = "Selected",
-                                                            tint = MaterialTheme.colorScheme.primary,
-                                                            modifier = Modifier.size(18.dp)
-                                                        )
-                                                    }
-                                                }
-                                                Text(
-                                                    text = "${doctor.specialty} • ${hospital?.name ?: ""}",
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                            }
-                                        },
-                                        onClick = {
-                                            selectedDoctor = doctor
-                                            doctorDropdownExpanded = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
-
-                        if (selectedDoctor != null) {
-                            val doctor = selectedDoctor!!
-                            val hospital = HospitalRepository.getHospital(doctor.hospitalId)
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Surface(
-                                shape = RoundedCornerShape(14.dp),
-                                color = LocalElevatedSurface.current,
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Column(modifier = Modifier.padding(14.dp)) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.CheckCircle,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Text(
-                                            text = "Selected Profile",
-                                            style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.primary
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.height(6.dp))
-                                    Text(
-                                        text = "Dr. ${doctor.name}",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        text = "${doctor.specialty} • ${doctor.qualifications}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        text = hospital?.name ?: doctor.hospitalId,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        }
-                    } else {
-                        if (role == UserRole.HOSPITAL_ADMIN) {
+                    if (generalError != null) {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
                             Text(
-                                text = "Hospital Administration",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "Select hospital branch and enter your name",
+                                text = generalError.orEmpty(),
+                                color = MaterialTheme.colorScheme.error,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                modifier = Modifier.padding(12.dp)
                             )
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            ExposedDropdownMenuBox(
-                                expanded = hospitalDropdownExpanded,
-                                onExpandedChange = { hospitalDropdownExpanded = it },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                OutlinedTextField(
-                                    value = selectedHospital?.name ?: "Select Hospital",
-                                    onValueChange = {},
-                                    readOnly = true,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .menuAnchor(MenuAnchorType.PrimaryNotEditable),
-                                    label = { Text("Select Managed Hospital *") },
-                                    leadingIcon = {
-                                        Icon(
-                                            imageVector = Icons.Default.LocalHospital,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary
-                                        )
-                                    },
-                                    trailingIcon = {
-                                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = hospitalDropdownExpanded)
-                                    },
-                                    shape = RoundedCornerShape(14.dp),
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                        unfocusedBorderColor = MaterialTheme.colorScheme.outline
-                                    )
-                                )
-                                ExposedDropdownMenu(
-                                    expanded = hospitalDropdownExpanded,
-                                    onDismissRequest = { hospitalDropdownExpanded = false }
-                                ) {
-                                    allHospitals.forEach { hosp ->
-                                        DropdownMenuItem(
-                                            text = {
-                                                Column {
-                                                    Text(hosp.name, fontWeight = FontWeight.Bold)
-                                                    Text(
-                                                        "${hosp.area}, ${hosp.city}",
-                                                        style = MaterialTheme.typography.bodySmall,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                    )
-                                                }
-                                            },
-                                            onClick = {
-                                                selectedHospital = hosp
-                                                hospitalDropdownExpanded = false
-                                            }
-                                        )
-                                    }
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(16.dp))
                         }
-
-                        OutlinedTextField(
-                            value = fullName,
-                            onValueChange = {
-                                fullName = it
-                                touched = true
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            label = {
-                                Text(if (role == UserRole.HOSPITAL_ADMIN) "Administrator Name *" else "Full Name *")
-                            },
-                            placeholder = {
-                                Text(if (role == UserRole.HOSPITAL_ADMIN) "e.g. Dr. Suresh Kulkarni" else "e.g. Rahul Verma")
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = if (role == UserRole.HOSPITAL_ADMIN) Icons.Default.Badge else Icons.Default.Person,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            },
-                            isError = errorMessage != null,
-                            supportingText = {
-                                if (errorMessage != null) {
-                                    Text(
-                                        text = errorMessage,
-                                        color = MaterialTheme.colorScheme.error
-                                    )
-                                } else {
-                                    Text("Letters and spaces only, min 3 characters")
-                                }
-                            },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(
-                                capitalization = KeyboardCapitalization.Words,
-                                imeAction = ImeAction.Done
-                            ),
-                            keyboardActions = KeyboardActions(
-                                onDone = {
-                                    focusManager.clearFocus()
-                                    handleContinue()
-                                }
-                            ),
-                            shape = RoundedCornerShape(14.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                unfocusedBorderColor = MaterialTheme.colorScheme.outline
-                            )
-                        )
+                        Spacer(modifier = Modifier.height(14.dp))
                     }
 
-                    Spacer(modifier = Modifier.height(20.dp))
+                    // Email Address Input
+                    OutlinedTextField(
+                        value = email,
+                        onValueChange = { email = it },
+                        label = { Text("Email Address *") },
+                        leadingIcon = { Icon(imageVector = Icons.Default.Email, contentDescription = null) },
+                        isError = touched && !emailValidation.isValid,
+                        supportingText = {
+                            if (touched && !emailValidation.isValid) {
+                                Text(emailValidation.errorMessage ?: "", color = MaterialTheme.colorScheme.error)
+                            }
+                        },
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Email,
+                            imeAction = ImeAction.Next
+                        ),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Password Input
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = { password = it },
+                        label = { Text("Password *") },
+                        leadingIcon = { Icon(imageVector = Icons.Default.Lock, contentDescription = null) },
+                        trailingIcon = {
+                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                Icon(
+                                    imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                    contentDescription = if (passwordVisible) "Hide password" else "Show password"
+                                )
+                            }
+                        },
+                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        isError = touched && !passwordValidation.isValid,
+                        supportingText = {
+                            if (touched && !passwordValidation.isValid) {
+                                Text(passwordValidation.errorMessage ?: "", color = MaterialTheme.colorScheme.error)
+                            }
+                        },
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Password,
+                            imeAction = ImeAction.Done
+                        ),
+                        keyboardActions = KeyboardActions(onDone = { handleSignInSubmit() }),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp)
+                    )
+
+                    // Forgot Password Link
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(
+                            onClick = {
+                                resetEmail = email.trim()
+                                resetSuccessMessage = null
+                                resetErrorMessage = null
+                                showForgotPasswordDialog = true
+                            }
+                        ) {
+                            Text(
+                                text = "Forgot password?",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
 
                     PrimaryButton(
-                        text = "Continue to Dashboard",
-                        onClick = { handleContinue() },
-                        enabled = isValid
+                        text = if (isLoading) "Signing in..." else "Sign In as ${role.label}",
+                        onClick = { handleSignInSubmit() },
+                        enabled = !isLoading
                     )
+
+                    val signupAction = if (role == UserRole.PATIENT) {
+                        onNavigateToSignUp
+                    } else {
+                        onNavigateToSignup
+                    }
+
+                    if (signupAction != null) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            val promptText = when (role) {
+                                UserRole.PATIENT -> "Don't have a patient account?"
+                                UserRole.DOCTOR -> "New doctor applicant?"
+                                UserRole.HOSPITAL -> "Hospital staff applicant?"
+                                UserRole.ADMIN -> ""
+                            }
+                            Text(
+                                text = promptText,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            TextButton(onClick = signupAction) {
+                                Text(
+                                    text = if (role == UserRole.PATIENT) "Sign Up" else "Apply for Account",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
-            // Subtle Security Notice
+            // Security Notice
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center,
@@ -555,14 +370,132 @@ fun LoginScreen(
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = "Encrypted session persistence",
+                    text = "Role-verified Firebase Authentication",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.outline
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(24.dp))
         }
+    }
+
+    // Forgot Password Dialog
+    if (showForgotPasswordDialog) {
+        val resetEmailValidation = AuthValidators.validateEmail(resetEmail)
+        AlertDialog(
+            onDismissRequest = {
+                if (!resetLoading) showForgotPasswordDialog = false
+            },
+            title = {
+                Text(
+                    text = "Reset Password",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "Enter your registered email address to receive password reset instructions.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    if (resetSuccessMessage != null) {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = resetSuccessMessage.orEmpty(),
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(12.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                    }
+
+                    if (resetErrorMessage != null) {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.errorContainer,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = resetErrorMessage.orEmpty(),
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(12.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                    }
+
+                    OutlinedTextField(
+                        value = resetEmail,
+                        onValueChange = {
+                            resetEmail = it
+                            resetErrorMessage = null
+                        },
+                        label = { Text("Email Address") },
+                        leadingIcon = { Icon(Icons.Default.Email, contentDescription = null) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        enabled = !resetLoading
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (!resetEmailValidation.isValid) {
+                            resetErrorMessage = resetEmailValidation.errorMessage ?: "Please enter a valid email"
+                            return@Button
+                        }
+                        resetLoading = true
+                        resetErrorMessage = null
+                        resetSuccessMessage = null
+                        coroutineScope.launch {
+                            val res = authRepository.sendPasswordReset(resetEmail.trim())
+                            resetLoading = false
+                            res.fold(
+                                onSuccess = {
+                                    resetSuccessMessage = "Password reset link sent! Please check your inbox and spam folder."
+                                },
+                                onFailure = { err ->
+                                    resetErrorMessage = err.message ?: "Failed to send reset link."
+                                }
+                            )
+                        }
+                    },
+                    enabled = !resetLoading
+                ) {
+                    if (resetLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text("Send Reset Link")
+                    }
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { showForgotPasswordDialog = false },
+                    enabled = !resetLoading
+                ) {
+                    Text("Close")
+                }
+            }
+        )
     }
 }
 
@@ -571,9 +504,10 @@ fun LoginScreen(
 fun LoginScreenPreview() {
     CareConnectTheme {
         LoginScreen(
-            role = UserRole.DOCTOR,
+            role = UserRole.PATIENT,
             onLoginSuccess = {},
-            onBack = {}
+            onBack = {},
+            onNavigateToSignUp = {}
         )
     }
 }
