@@ -77,6 +77,7 @@ fun LoginScreen(
     role: UserRole,
     onLoginSuccess: () -> Unit,
     onBack: () -> Unit,
+    onNavigateToSignup: (() -> Unit)? = null,
     authRepository: AuthRepository = AuthRepository.getInstance()
 ) {
     val context = LocalContext.current
@@ -315,6 +316,34 @@ fun LoginScreen(
                         onClick = { handleSignInSubmit() },
                         enabled = !isLoading
                     )
+
+                    if (onNavigateToSignup != null && (role == UserRole.DOCTOR || role == UserRole.HOSPITAL)) {
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            val promptText = if (role == UserRole.DOCTOR) {
+                                "New doctor applicant?"
+                            } else {
+                                "Hospital staff applicant?"
+                            }
+                            Text(
+                                text = promptText,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            TextButton(onClick = onNavigateToSignup) {
+                                Text(
+                                    text = "Apply for Account",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
                 }
             }
 

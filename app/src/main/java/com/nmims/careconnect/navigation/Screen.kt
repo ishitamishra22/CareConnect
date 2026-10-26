@@ -8,6 +8,9 @@ import com.nmims.careconnect.data.model.UserRole
 sealed class Screen {
     data object RoleSelection : Screen()
     data class Login(val role: UserRole) : Screen()
+    data object DoctorSignup : Screen()
+    data object HospitalStaffSignup : Screen()
+    data class ApprovalPending(val email: String = "", val role: UserRole = UserRole.DOCTOR) : Screen()
     data object PatientHome : Screen()
     data object DoctorHome : Screen()
     data object AdminHome : Screen()

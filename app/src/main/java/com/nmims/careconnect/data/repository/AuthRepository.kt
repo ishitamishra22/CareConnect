@@ -91,7 +91,12 @@ class AuthRepository(
             // Account status validation: inactive / blocked accounts fail closed
             if (!profile.active) {
                 auth.signOut()
-                val blockedReason = "Your account has been deactivated or blocked by an administrator."
+                val isPending = profile.createdBy == "self_registration" || profile.createdBy == "self"
+                val blockedReason = if (isPending && (profile.role == UserRole.DOCTOR || profile.role == UserRole.HOSPITAL)) {
+                    "Your application is currently pending approval by a System Administrator."
+                } else {
+                    "Your account has been deactivated or blocked by an administrator."
+                }
                 _authState.value = AuthState.Blocked(blockedReason)
                 return@withContext Result.failure(Exception(blockedReason))
             }
@@ -199,6 +204,134 @@ class AuthRepository(
 
         try {
             user.updatePassword(newPass).await()
+            Result.success(Unit)
+        } catch (e: Throwable) {
+            val error = AuthError.fromException(e)
+            Result.failure(Exception(error.message, e))
+        }
+    }
+
+    /**
+     * Registers a new Doctor applicant in a restricted pending-approval state:
+     * - Creates Firebase Authentication credentials
+     * - Dispatches email verification
+     * - Records a pending registration profile in `users/{uid}` with `active = false` and `createdBy = "self_registration"`
+     * - Does NOT assign active privileges or linkedDoctorId (assigned only upon Admin verification)
+     * - Signs the user out immediately so unapproved applicants cannot access dashboards.
+     */
+    suspend fun registerDoctorPending(
+        fullName: String,
+        email: String,
+        phone: String,
+        password: String,
+        registrationNumber: String,
+        specialization: String,
+        hospitalName: String
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val authResult = auth.createUserWithEmailAndPassword(email.trim(), password).await()
+            val firebaseUser = authResult.user
+                ?: throw IllegalStateException("Firebase user was null after registration")
+
+            // Send verification email
+            try {
+                firebaseUser.sendEmailVerification().await()
+            } catch (e: Exception) {
+                Log.w(TAG, "Email verification dispatch notice: ${e.message}")
+            }
+
+            // Create restricted pending profile (active = false)
+            val profile = UserProfile(
+                uid = firebaseUser.uid,
+                role = UserRole.DOCTOR,
+                email = email.trim(),
+                phone = phone.trim(),
+                displayName = fullName.trim(),
+                active = false, // Restricted pending approval
+                linkedDoctorId = null, // Set only by Admin upon identity verification
+                linkedHospitalId = null,
+                createdAt = Timestamp.now(),
+                createdBy = "self_registration",
+                lastLoginAt = null
+            )
+
+            val profileMap = profile.toMap().toMutableMap().apply {
+                put("registrationNumber", registrationNumber.trim())
+                put("specialization", specialization.trim())
+                put("requestedHospital", hospitalName.trim())
+                put("approvalStatus", "PENDING")
+            }
+
+            db.collection(USERS_COLLECTION).document(firebaseUser.uid)
+                .set(profileMap)
+                .await()
+
+            // Sign out to enforce pending gate
+            auth.signOut()
+            _authState.value = AuthState.SignedOut
+            Result.success(Unit)
+        } catch (e: Throwable) {
+            val error = AuthError.fromException(e)
+            Result.failure(Exception(error.message, e))
+        }
+    }
+
+    /**
+     * Registers a new Hospital Staff applicant in a restricted pending-approval state:
+     * - Creates Firebase Authentication credentials
+     * - Dispatches email verification
+     * - Records a pending registration profile in `users/{uid}` with `active = false` and `createdBy = "self_registration"`
+     * - Does NOT assign active privileges or linkedHospitalId (assigned only upon Admin verification)
+     * - Signs the user out immediately so unapproved applicants cannot access dashboards.
+     */
+    suspend fun registerHospitalStaffPending(
+        fullName: String,
+        email: String,
+        phone: String,
+        password: String,
+        designation: String,
+        hospitalName: String
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val authResult = auth.createUserWithEmailAndPassword(email.trim(), password).await()
+            val firebaseUser = authResult.user
+                ?: throw IllegalStateException("Firebase user was null after registration")
+
+            // Send verification email
+            try {
+                firebaseUser.sendEmailVerification().await()
+            } catch (e: Exception) {
+                Log.w(TAG, "Email verification dispatch notice: ${e.message}")
+            }
+
+            // Create restricted pending profile (active = false)
+            val profile = UserProfile(
+                uid = firebaseUser.uid,
+                role = UserRole.HOSPITAL,
+                email = email.trim(),
+                phone = phone.trim(),
+                displayName = fullName.trim(),
+                active = false, // Restricted pending approval
+                linkedDoctorId = null,
+                linkedHospitalId = null, // Admin establishes valid linkedHospitalId before activation
+                createdAt = Timestamp.now(),
+                createdBy = "self_registration",
+                lastLoginAt = null
+            )
+
+            val profileMap = profile.toMap().toMutableMap().apply {
+                put("designation", designation.trim())
+                put("requestedHospital", hospitalName.trim())
+                put("approvalStatus", "PENDING")
+            }
+
+            db.collection(USERS_COLLECTION).document(firebaseUser.uid)
+                .set(profileMap)
+                .await()
+
+            // Sign out to enforce pending gate
+            auth.signOut()
+            _authState.value = AuthState.SignedOut
             Result.success(Unit)
         } catch (e: Throwable) {
             val error = AuthError.fromException(e)

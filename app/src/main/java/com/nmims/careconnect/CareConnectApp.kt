@@ -19,6 +19,9 @@ import com.nmims.careconnect.navigation.Screen
 import com.nmims.careconnect.navigation.rememberAppNavController
 import com.nmims.careconnect.ui.about.AboutScreen
 import com.nmims.careconnect.ui.admin.AdminHomeScreen
+import com.nmims.careconnect.ui.auth.ApprovalPendingScreen
+import com.nmims.careconnect.ui.auth.DoctorSignupScreen
+import com.nmims.careconnect.ui.auth.HospitalStaffSignupScreen
 import com.nmims.careconnect.ui.auth.LoginScreen
 import com.nmims.careconnect.ui.auth.RoleSelectionScreen
 import com.nmims.careconnect.ui.doctor.DoctorHomeScreen
@@ -127,7 +130,46 @@ fun CareConnectApp(
                         UserRole.ADMIN -> navController.resetTo(Screen.SystemAdminDashboard)
                     }
                 },
+                onNavigateToSignup = when (current.role) {
+                    UserRole.DOCTOR -> { { navController.navigate(Screen.DoctorSignup) } }
+                    UserRole.HOSPITAL -> { { navController.navigate(Screen.HospitalStaffSignup) } }
+                    else -> null
+                },
                 onBack = { navController.back() }
+            )
+        }
+        is Screen.DoctorSignup -> {
+            DoctorSignupScreen(
+                onSignupSubmitted = { email ->
+                    navController.resetTo(Screen.RoleSelection)
+                    navController.navigate(Screen.ApprovalPending(email = email, role = UserRole.DOCTOR))
+                },
+                onNavigateToLogin = { navController.back() },
+                onBack = { navController.back() },
+                authRepository = authRepository
+            )
+        }
+        is Screen.HospitalStaffSignup -> {
+            HospitalStaffSignupScreen(
+                onSignupSubmitted = { email ->
+                    navController.resetTo(Screen.RoleSelection)
+                    navController.navigate(Screen.ApprovalPending(email = email, role = UserRole.HOSPITAL))
+                },
+                onNavigateToLogin = { navController.back() },
+                onBack = { navController.back() },
+                authRepository = authRepository
+            )
+        }
+        is Screen.ApprovalPending -> {
+            ApprovalPendingScreen(
+                title = if (current.role == UserRole.DOCTOR) "Doctor Verification Pending" else "Hospital Staff Verification Pending",
+                message = if (current.role == UserRole.DOCTOR) {
+                    "Your doctor application has been submitted and is currently pending verification of credentials and approval by a System Administrator."
+                } else {
+                    "Your hospital staff registration has been submitted and is pending verification of hospital association and approval by a System Administrator."
+                },
+                email = current.email,
+                onBackToLogin = { navController.resetTo(Screen.RoleSelection) }
             )
         }
         is Screen.PatientHome -> {

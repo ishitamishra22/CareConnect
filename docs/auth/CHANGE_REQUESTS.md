@@ -57,3 +57,20 @@ This document records architectural clarifications, migrations, and compatibilit
   - **Audit Logging**: All administrative operations (status changes, profile updates, password resets, staff provisioning) write immutable audit logs to `adminAuditLogs/{logId}`.
   - **Medical Privacy**: `isAdmin()` is strictly barred from patient medical records (`records`), clinical documents (`documents`), admissions, and bookings.
 
+---
+
+## 6. Batch 1 — Doctor & Hospital Staff Pending Self-Registration
+- **Context**: Doctors and Hospital Staff need registration endpoints accessible from their respective login screens while preventing unverified role activation or privilege self-assignment.
+- **Decision & Resolution**:
+  - Added `DoctorSignupScreen` and `HospitalStaffSignupScreen` accessible via "Apply for Account" links on `LoginScreen`.
+  - Added `ApprovalPendingScreen` to display clear verification and pending-status messaging to applicants.
+  - Added pending applicant methods `registerDoctorPending` and `registerHospitalStaffPending` in `AuthRepository`:
+    - Dispatches Firebase Authentication user creation.
+    - Sends email verification via `firebaseUser.sendEmailVerification()`.
+    - Creates profile with `active = false` (blocked from dashboard access until Admin reviews and activates).
+    - Stores `createdBy = "self_registration"`, `linkedDoctorId = null`, and `linkedHospitalId = null`.
+    - Immediately signs the applicant out to prevent unapproved session elevation.
+    - Updated `signInWithEmail` to show an informative "pending approval" message for unapproved staff applicants rather than a generic blocked notification.
+  - Navigation integrated cleanly via `Screen.DoctorSignup`, `Screen.HospitalStaffSignup`, and `Screen.ApprovalPending`.
+
+
