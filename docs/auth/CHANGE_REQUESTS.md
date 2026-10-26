@@ -57,3 +57,32 @@ This document records architectural clarifications, migrations, and compatibilit
   - **Audit Logging**: All administrative operations (status changes, profile updates, password resets, staff provisioning) write immutable audit logs to `adminAuditLogs/{logId}`.
   - **Medical Privacy**: `isAdmin()` is strictly barred from patient medical records (`records`), clinical documents (`documents`), admissions, and bookings.
 
+
+---
+
+## 6. Part 3 — Patient Authentication Architecture & Domain Integration
+- **Context**: Implementation of production-style Patient Authentication (`feature/auth-patient`) while strictly protecting Ishita's Shared Authentication Core and Admin domain.
+- **Architectural Implementation & Decisions**:
+  1. **Strict Non-Privilege Role Hardcoding**:
+     - `AuthRepository.signUpPatient` strictly assigns `role = UserRole.PATIENT`.
+     - Patient registration explicitly sets `linkedDoctorId = null`, `linkedHospitalId = null`, `active = true`, `createdBy = "self"`.
+     - Matches `firebase/firestore.rules` Section A create-rule for `users/{userId}` without requiring any rule modifications or privilege elevation.
+  2. **Indian Mobile Number Support & Formatting**:
+     - `AuthValidators.validateIndianMobile` validates 10-digit Indian numbers starting with 6, 7, 8, 9 with optional `+91` or `91` prefixes.
+     - `AuthValidators.formatIndianMobile` canonicalizes valid numbers to E.164-compatible `+91XXXXXXXXXX`.
+     - Stored under `phone` in `users/{uid}` and `patients/{uid}` for hospital bookings, admissions, and SMS communications.
+  3. **Mobile/Password vs Email/Password Login Decision**:
+     - In Firebase Authentication, email/password is the primary credential provider.
+     - Unauthenticated phone lookups against Firestore are strictly prevented by `firestore.rules` line 44 (`allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin())`), which ensures patient phone numbers and emails cannot be enumerated or scraped by unauthenticated attackers.
+     - Therefore, email/password remains the secure primary sign-in credential, with verified phone numbers permanently bound to the user's healthcare profile.
+  4. **Email Verification Lifecycle**:
+     - Upon patient signup, Firebase Auth dispatches an initial email verification link.
+     - A dedicated `EmailVerificationScreen` allows checking status (`user.reload()`), resending links with a 30-second cooldown timer, or proceeding to the dashboard.
+     - `PatientHomeScreen` renders a non-intrusive verification reminder banner if the email is unverified, with a direct 1-tap verification shortcut.
+  5. **Medical Records & Portfolio UID Binding**:
+     - Upon login or registration, `AppSession.currentPatientId = user.uid` and `AppSession.currentUserName = user.displayName`.
+     - Directly binds `PortfolioRepository`, `BookingRepository`, and `AdmissionRepository` to the authenticated Firebase UID.
+     - Ensures full zero-trust privacy: each patient only accesses their own medical history, documents, and bookings under `/patients/{uid}` and `/bookings`.
+  6. **In-App Account Security & Password Management**:
+     - A secure "Change Password" dialog in `PatientHomeScreen` allows authenticated patients to update their credentials using `AuthRepository.changePassword` (requiring current password reauthentication first).
+     - "Forgot Password?" dialog in `LoginScreen` sends secure password reset emails via `AuthRepository.sendPasswordReset`.
