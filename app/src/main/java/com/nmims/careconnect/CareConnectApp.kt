@@ -127,8 +127,43 @@ fun CareConnectApp(
                         UserRole.ADMIN -> navController.resetTo(Screen.SystemAdminDashboard)
                     }
                 },
+                onNavigateToSignUp = if (current.role == UserRole.PATIENT) {
+                    { navController.navigate(Screen.PatientSignUp) }
+                } else null,
                 onBack = { navController.back() }
             )
+        }
+        is Screen.PatientSignUp -> {
+            com.nmims.careconnect.ui.auth.PatientSignUpScreen(
+                onSignUpSuccess = {
+                    navController.resetTo(Screen.PatientHome)
+                    navController.navigate(Screen.EmailVerification)
+                },
+                onNavigateToLogin = { navController.resetTo(Screen.Login(UserRole.PATIENT)) },
+                onBack = { navController.back() },
+                authRepository = authRepository
+            )
+        }
+        is Screen.EmailVerification -> {
+            AuthGate(
+                authRepository = authRepository,
+                requiredRoles = setOf(UserRole.PATIENT),
+                onNavigateToLogin = { navController.resetTo(Screen.RoleSelection) }
+            ) {
+                com.nmims.careconnect.ui.auth.EmailVerificationScreen(
+                    onVerificationSuccess = {
+                        navController.resetTo(Screen.PatientHome)
+                    },
+                    onContinueToDashboard = {
+                        navController.resetTo(Screen.PatientHome)
+                    },
+                    onSignOut = {
+                        authRepository.signOut()
+                        navController.resetTo(Screen.RoleSelection)
+                    },
+                    authRepository = authRepository
+                )
+            }
         }
         is Screen.PatientHome -> {
             AuthGate(
@@ -146,10 +181,14 @@ fun CareConnectApp(
                     onAdmissionClick = { admissionId ->
                         navController.navigate(Screen.AdmissionDetail(admissionId))
                     },
+                    onNavigateToEmailVerification = {
+                        navController.navigate(Screen.EmailVerification)
+                    },
                     onLogout = {
                         authRepository.signOut()
                         navController.resetTo(Screen.RoleSelection)
-                    }
+                    },
+                    authRepository = authRepository
                 )
             }
         }
