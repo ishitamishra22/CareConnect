@@ -52,14 +52,20 @@ import com.nmims.careconnect.ui.common.LoadingIndicator
 import com.nmims.careconnect.ui.booking.BookAppointmentScreen
 import com.nmims.careconnect.ui.booking.BookLabTestScreen
 
+import com.nmims.careconnect.data.repository.AuthRepository
+import com.nmims.careconnect.ui.auth.AuthGate
+
 @Composable
 fun CareConnectApp(
-    navController: AppNavController = rememberAppNavController()
+    navController: AppNavController = rememberAppNavController(),
+    authRepository: AuthRepository = AuthRepository.getInstance()
 ) {
     val context = LocalContext.current
     var isAppReady by remember { mutableStateOf(HospitalRepository.isLoaded) }
 
     LaunchedEffect(Unit) {
+        // Initialize session and hospital repository
+        authRepository.initialize()
         if (!HospitalRepository.isLoaded) {
             val success = HospitalRepository.load()
             if (!success) {
@@ -78,7 +84,7 @@ fun CareConnectApp(
                 LoadingIndicator()
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = "Loading hospitals...",
+                    text = "Loading CareConnect...",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -109,29 +115,39 @@ fun CareConnectApp(
         is Screen.Login -> {
             LoginScreen(
                 role = current.role,
+                authRepository = authRepository,
                 onLoginSuccess = {
                     when (current.role) {
                         UserRole.PATIENT -> navController.resetTo(Screen.PatientHome)
                         UserRole.DOCTOR -> navController.resetTo(Screen.DoctorHome)
-                        UserRole.HOSPITAL_ADMIN -> navController.resetTo(Screen.AdminHome)
+                        UserRole.HOSPITAL, UserRole.ADMIN -> navController.resetTo(Screen.AdminHome)
                     }
                 },
                 onBack = { navController.back() }
             )
         }
         is Screen.PatientHome -> {
-            PatientHomeScreen(
-                onNavigateToPortfolio = { navController.navigate(Screen.Portfolio) },
-                onNavigateToSearch = { navController.navigate(Screen.Search) },
-                onNavigateToBookingHub = { navController.navigate(Screen.BookingHub) },
-                onNavigateToMyBookings = { navController.navigate(Screen.MyBookings) },
-                onNavigateToAdmissionForm = { navController.navigate(Screen.AdmissionForm()) },
-                onNavigateToMyAdmissions = { navController.navigate(Screen.MyAdmissions) },
-                onAdmissionClick = { admissionId ->
-                    navController.navigate(Screen.AdmissionDetail(admissionId))
-                },
-                onLogout = { navController.resetTo(Screen.RoleSelection) }
-            )
+            AuthGate(
+                authRepository = authRepository,
+                requiredRoles = setOf(UserRole.PATIENT),
+                onNavigateToLogin = { navController.resetTo(Screen.RoleSelection) }
+            ) {
+                PatientHomeScreen(
+                    onNavigateToPortfolio = { navController.navigate(Screen.Portfolio) },
+                    onNavigateToSearch = { navController.navigate(Screen.Search) },
+                    onNavigateToBookingHub = { navController.navigate(Screen.BookingHub) },
+                    onNavigateToMyBookings = { navController.navigate(Screen.MyBookings) },
+                    onNavigateToAdmissionForm = { navController.navigate(Screen.AdmissionForm()) },
+                    onNavigateToMyAdmissions = { navController.navigate(Screen.MyAdmissions) },
+                    onAdmissionClick = { admissionId ->
+                        navController.navigate(Screen.AdmissionDetail(admissionId))
+                    },
+                    onLogout = {
+                        authRepository.signOut()
+                        navController.resetTo(Screen.RoleSelection)
+                    }
+                )
+            }
         }
         is Screen.BookingHub -> {
             com.nmims.careconnect.ui.booking.BookingHubScreen(
@@ -148,12 +164,21 @@ fun CareConnectApp(
             )
         }
         is Screen.DoctorHome -> {
-            DoctorHomeScreen(
-                onLogout = { navController.resetTo(Screen.RoleSelection) },
-                onAppointmentClick = { bookingId ->
-                    navController.navigate(Screen.DoctorAppointmentDetail(bookingId))
-                }
-            )
+            AuthGate(
+                authRepository = authRepository,
+                requiredRoles = setOf(UserRole.DOCTOR),
+                onNavigateToLogin = { navController.resetTo(Screen.RoleSelection) }
+            ) {
+                DoctorHomeScreen(
+                    onLogout = {
+                        authRepository.signOut()
+                        navController.resetTo(Screen.RoleSelection)
+                    },
+                    onAppointmentClick = { bookingId ->
+                        navController.navigate(Screen.DoctorAppointmentDetail(bookingId))
+                    }
+                )
+            }
         }
         is Screen.DoctorAppointmentDetail -> {
             com.nmims.careconnect.ui.doctor.DoctorAppointmentDetailScreen(
@@ -162,12 +187,21 @@ fun CareConnectApp(
             )
         }
         is Screen.AdminHome -> {
-            AdminHomeScreen(
-                onLogout = { navController.resetTo(Screen.RoleSelection) },
-                onAdmissionClick = { admissionId ->
-                    navController.navigate(Screen.AdminAdmissionReview(admissionId))
-                }
-            )
+            AuthGate(
+                authRepository = authRepository,
+                requiredRoles = setOf(UserRole.HOSPITAL, UserRole.ADMIN),
+                onNavigateToLogin = { navController.resetTo(Screen.RoleSelection) }
+            ) {
+                AdminHomeScreen(
+                    onLogout = {
+                        authRepository.signOut()
+                        navController.resetTo(Screen.RoleSelection)
+                    },
+                    onAdmissionClick = { admissionId ->
+                        navController.navigate(Screen.AdminAdmissionReview(admissionId))
+                    }
+                )
+            }
         }
         is Screen.Portfolio -> {
             PortfolioScreen(

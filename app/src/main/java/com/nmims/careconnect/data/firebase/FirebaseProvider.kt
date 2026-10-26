@@ -16,14 +16,12 @@ object FirebaseProvider {
     val storage: FirebaseStorage = FirebaseStorage.getInstance()
 
     suspend fun ensureSignedIn() {
-        if (auth.currentUser == null) {
-            auth.signInAnonymously().await()
-        }
+        // Shared Authentication Core: User sessions are managed via AuthRepository.
+        // If no user is authenticated, operations requiring auth will naturally fail or await login.
     }
 
     suspend fun <T> safeCall(timeoutMs: Long = 15000, block: suspend () -> T): Result<T> {
         return try {
-            ensureSignedIn()
             withTimeout(timeoutMs) {
                 Result.success(block())
             }

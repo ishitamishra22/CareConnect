@@ -4,6 +4,7 @@ package com.nmims.careconnect.data.firebase
  * Firestore collection and subcollection names used throughout CareConnect.
  */
 object Collections {
+    const val USERS = "users"
     const val PATIENTS = "patients"
     const val RECORDS = "records"
     const val DOCUMENTS = "documents"
@@ -14,3 +15,4 @@ object Collections {
     const val REVIEWS = "reviews"
     const val SLOT_LOCKS = "slotLocks"
 }
+

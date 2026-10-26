@@ -64,7 +64,7 @@ class PortfolioModelUnitTest {
             title = "Blood Test CBC",
             category = DocumentCategory.LAB_REPORT,
             addedOnMillis = 1700000000000L,
-            imageFilePath = "/data/user/0/documents/doc-999.jpg",
+            storagePath = "/data/user/0/documents/doc-999.jpg",
             notes = "Routine health checkup"
         )
 
